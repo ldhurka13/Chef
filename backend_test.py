@@ -1,0 +1,542 @@
+#!/usr/bin/env python3
+"""
+Comprehensive Backend API Test Suite for Flick Movie Recommendation Engine
+Tests all endpoints for functionality, error handling, and data consistency.
+"""
+
+import requests
+import json
+import time
+from datetime import datetime
+from typing import Dict, List, Optional
+
+# Use the public endpoint from frontend/.env
+BACKEND_URL = "https://vibe-console.preview.emergentagent.com"
+API_BASE = f"{BACKEND_URL}/api"
+
+class FlickBackendTester:
+    def __init__(self):
+        self.test_results = []
+        self.failed_tests = []
+        self.passed_tests = []
+        
+    def log_result(self, test_name: str, success: bool, details: str = "", response_data: dict = None):
+        """Log test result"""
+        result = {
+            "test": test_name,
+            "success": success,
+            "details": details,
+            "timestamp": datetime.now().isoformat(),
+            "response_data": response_data
+        }
+        self.test_results.append(result)
+        
+        if success:
+            self.passed_tests.append(test_name)
+            print(f"✅ PASS: {test_name}")
+            if details:
+                print(f"   Details: {details}")
+        else:
+            self.failed_tests.append(f"{test_name}: {details}")
+            print(f"❌ FAIL: {test_name}")
+            print(f"   Error: {details}")
+        print()
+
+    def make_request(self, method: str, endpoint: str, data: dict = None, timeout: int = 30) -> tuple:
+        """Make HTTP request and return (success, response_data, error_msg)"""
+        url = f"{API_BASE}{endpoint}"
+        headers = {"Content-Type": "application/json"}
+        
+        try:
+            if method == "GET":
+                response = requests.get(url, headers=headers, timeout=timeout)
+            elif method == "POST":
+                response = requests.post(url, json=data, headers=headers, timeout=timeout)
+            elif method == "DELETE":
+                response = requests.delete(url, headers=headers, timeout=timeout)
+            else:
+                return False, None, f"Unsupported method: {method}"
+            
+            # Check if response is successful
+            if response.status_code >= 200 and response.status_code < 300:
+                try:
+                    response_data = response.json()
+                    return True, response_data, ""
+                except json.JSONDecodeError:
+                    return True, {"raw_response": response.text}, ""
+            else:
+                error_msg = f"HTTP {response.status_code}"
+                try:
+                    error_detail = response.json()
+                    error_msg += f": {error_detail.get('detail', 'Unknown error')}"
+                except:
+                    error_msg += f": {response.text}"
+                return False, None, error_msg
+                
+        except requests.exceptions.Timeout:
+            return False, None, "Request timeout"
+        except requests.exceptions.ConnectionError:
+            return False, None, "Connection error - backend may be down"
+        except Exception as e:
+            return False, None, f"Request failed: {str(e)}"
+
+    def test_root_endpoint(self):
+        """Test basic API connectivity"""
+        success, data, error = self.make_request("GET", "/")
+        
+        if success and data and "message" in data:
+            self.log_result(
+                "Root Endpoint",
+                True,
+                f"API responding: {data['message']}"
+            )
+        else:
+            self.log_result(
+                "Root Endpoint",
+                False,
+                error or "Invalid response format"
+            )
+
+    def test_seed_data(self):
+        """Test seeding initial data (mock user + watch history)"""
+        success, data, error = self.make_request("POST", "/seed-data")
+        
+        if success and data:
+            if "message" in data and "count" in data:
+                self.log_result(
+                    "Seed Data",
+                    True,
+                    f"{data['message']} - {data['count']} movies seeded",
+                    data
+                )
+                return True
+            else:
+                self.log_result(
+                    "Seed Data",
+                    False,
+                    "Missing expected fields in response"
+                )
+                return False
+        else:
+            self.log_result(
+                "Seed Data",
+                False,
+                error
+            )
+            return False
+
+    def test_user_profile(self):
+        """Test getting user profile"""
+        success, data, error = self.make_request("GET", "/user/profile")
+        
+        if success and data:
+            required_fields = ["id", "username", "birth_year"]
+            missing_fields = [field for field in required_fields if field not in data]
+            
+            if not missing_fields:
+                self.log_result(
+                    "User Profile",
+                    True,
+                    f"User: {data['username']}, Birth Year: {data['birth_year']}",
+                    data
+                )
+                return data
+            else:
+                self.log_result(
+                    "User Profile", 
+                    False,
+                    f"Missing fields: {missing_fields}"
+                )
+                return None
+        else:
+            self.log_result(
+                "User Profile",
+                False,
+                error
+            )
+            return None
+
+    def test_watch_history(self):
+        """Test getting watch history"""
+        success, data, error = self.make_request("GET", "/user/watch-history")
+        
+        if success:
+            if isinstance(data, list):
+                self.log_result(
+                    "Watch History",
+                    True,
+                    f"Found {len(data)} movies in history",
+                    {"count": len(data), "sample": data[:2] if data else []}
+                )
+                return data
+            else:
+                self.log_result(
+                    "Watch History",
+                    False,
+                    "Response is not a list"
+                )
+                return []
+        else:
+            self.log_result(
+                "Watch History",
+                False,
+                error
+            )
+            return []
+
+    def test_trending_movies(self):
+        """Test getting trending movies"""
+        success, data, error = self.make_request("GET", "/movies/trending")
+        
+        if success and data:
+            results = data.get("results", [])
+            if results:
+                # Check first movie has required fields
+                movie = results[0]
+                required_fields = ["id", "title", "poster_url", "backdrop_url", "genres"]
+                missing_fields = [field for field in required_fields if field not in movie]
+                
+                if not missing_fields:
+                    self.log_result(
+                        "Trending Movies",
+                        True,
+                        f"Retrieved {len(results)} trending movies",
+                        {
+                            "count": len(results),
+                            "sample_movie": {
+                                "title": movie.get("title"),
+                                "genres": movie.get("genres", [])[:3]
+                            }
+                        }
+                    )
+                    return results
+                else:
+                    self.log_result(
+                        "Trending Movies",
+                        False,
+                        f"Movies missing required fields: {missing_fields}"
+                    )
+                    return []
+            else:
+                self.log_result(
+                    "Trending Movies",
+                    False,
+                    "No movies returned in results"
+                )
+                return []
+        else:
+            self.log_result(
+                "Trending Movies",
+                False,
+                error
+            )
+            return []
+
+    def test_discover_movies(self):
+        """Test movie discovery with vibe parameters"""
+        # Test default parameters
+        vibe_params = {
+            "brain_power": 50,
+            "mood": 50,
+            "energy": 50,
+            "include_rewatches": False,
+            "page": 1
+        }
+        
+        success, data, error = self.make_request("POST", "/movies/discover", vibe_params)
+        
+        if success and data:
+            results = data.get("results", [])
+            if results:
+                # Check movies have scoring fields
+                movie = results[0]
+                scoring_fields = ["match_percentage", "vibe_tag"]
+                present_fields = [field for field in scoring_fields if field in movie]
+                
+                if present_fields:
+                    self.log_result(
+                        "Discover Movies (Default Vibe)",
+                        True,
+                        f"Retrieved {len(results)} movies with scoring",
+                        {
+                            "count": len(results),
+                            "sample_movie": {
+                                "title": movie.get("title"),
+                                "match_percentage": movie.get("match_percentage"),
+                                "vibe_tag": movie.get("vibe_tag")
+                            }
+                        }
+                    )
+                    
+                    # Test different vibe parameters
+                    self._test_extreme_vibes()
+                    return results
+                else:
+                    self.log_result(
+                        "Discover Movies (Default Vibe)",
+                        False,
+                        f"Movies missing scoring fields: {scoring_fields}"
+                    )
+                    return []
+            else:
+                self.log_result(
+                    "Discover Movies (Default Vibe)",
+                    False,
+                    "No movies returned in discover results"
+                )
+                return []
+        else:
+            self.log_result(
+                "Discover Movies (Default Vibe)",
+                False,
+                error
+            )
+            return []
+
+    def _test_extreme_vibes(self):
+        """Test discover with extreme vibe parameters"""
+        extreme_vibes = [
+            {
+                "name": "Low Energy + Sad Mood",
+                "params": {"brain_power": 30, "mood": 10, "energy": 10, "include_rewatches": False}
+            },
+            {
+                "name": "High Energy + Happy Mood",
+                "params": {"brain_power": 80, "mood": 90, "energy": 90, "include_rewatches": False}
+            },
+            {
+                "name": "With Rewatches",
+                "params": {"brain_power": 50, "mood": 50, "energy": 50, "include_rewatches": True}
+            }
+        ]
+        
+        for vibe_test in extreme_vibes:
+            success, data, error = self.make_request("POST", "/movies/discover", vibe_test["params"])
+            
+            if success and data and data.get("results"):
+                self.log_result(
+                    f"Discover Movies ({vibe_test['name']})",
+                    True,
+                    f"Retrieved {len(data['results'])} movies"
+                )
+            else:
+                self.log_result(
+                    f"Discover Movies ({vibe_test['name']})",
+                    False,
+                    error or "No results returned"
+                )
+
+    def test_emergency_recommendations(self):
+        """Test 'I Can't Even' emergency recommendations"""
+        success, data, error = self.make_request("GET", "/movies/emergency")
+        
+        if success and data:
+            results = data.get("results", [])
+            if results:
+                # Check emergency movies have required fields
+                movie = results[0]
+                emergency_fields = ["tmdb_id", "title", "user_rating", "vibe_tag"]
+                missing_fields = [field for field in emergency_fields if field not in movie]
+                
+                if not missing_fields:
+                    self.log_result(
+                        "Emergency Recommendations",
+                        True,
+                        f"Retrieved {len(results)} comfort movies",
+                        {
+                            "count": len(results),
+                            "sample_movie": {
+                                "title": movie.get("title"),
+                                "user_rating": movie.get("user_rating"),
+                                "vibe_tag": movie.get("vibe_tag")
+                            }
+                        }
+                    )
+                    return results
+                else:
+                    self.log_result(
+                        "Emergency Recommendations",
+                        False,
+                        f"Movies missing required fields: {missing_fields}"
+                    )
+                    return []
+            else:
+                # This might be expected if no high-rated old movies exist
+                self.log_result(
+                    "Emergency Recommendations",
+                    True,
+                    "No emergency movies found (expected if no suitable watch history exists)"
+                )
+                return []
+        else:
+            self.log_result(
+                "Emergency Recommendations",
+                False,
+                error
+            )
+            return []
+
+    def test_movie_details(self, movie_id: int = 278):
+        """Test getting detailed movie information (default: The Shawshank Redemption)"""
+        success, data, error = self.make_request("GET", f"/movies/{movie_id}")
+        
+        if success and data:
+            required_fields = ["id", "title", "overview", "poster_url", "genres"]
+            missing_fields = [field for field in required_fields if field not in data]
+            
+            if not missing_fields:
+                self.log_result(
+                    "Movie Details",
+                    True,
+                    f"Retrieved details for: {data.get('title')}",
+                    {
+                        "title": data.get("title"),
+                        "has_trailer": bool(data.get("trailer_url")),
+                        "cast_count": len(data.get("cast", [])),
+                        "similar_count": len(data.get("similar", []))
+                    }
+                )
+                return data
+            else:
+                self.log_result(
+                    "Movie Details",
+                    False,
+                    f"Missing required fields: {missing_fields}"
+                )
+                return None
+        else:
+            self.log_result(
+                "Movie Details",
+                False,
+                error
+            )
+            return None
+
+    def test_add_to_watch_history(self, movie_id: int = 550, rating: int = 8):
+        """Test adding movie to watch history"""
+        watch_data = {
+            "tmdb_id": movie_id,
+            "user_rating": rating,
+            "title": "Fight Club",
+            "poster_path": "/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg"
+        }
+        
+        success, data, error = self.make_request("POST", "/user/watch-history", watch_data)
+        
+        if success and data:
+            required_fields = ["user_id", "tmdb_id", "user_rating", "title"]
+            missing_fields = [field for field in required_fields if field not in data]
+            
+            if not missing_fields:
+                self.log_result(
+                    "Add to Watch History",
+                    True,
+                    f"Added {data.get('title')} with rating {data.get('user_rating')}/10"
+                )
+                return True
+            else:
+                self.log_result(
+                    "Add to Watch History",
+                    False,
+                    f"Response missing fields: {missing_fields}"
+                )
+                return False
+        else:
+            self.log_result(
+                "Add to Watch History",
+                False,
+                error
+            )
+            return False
+
+    def test_genres_endpoint(self):
+        """Test getting genres list"""
+        success, data, error = self.make_request("GET", "/genres")
+        
+        if success and data:
+            genres = data.get("genres", [])
+            if genres and len(genres) > 0:
+                self.log_result(
+                    "Genres List",
+                    True,
+                    f"Retrieved {len(genres)} genres"
+                )
+                return True
+            else:
+                self.log_result(
+                    "Genres List", 
+                    False,
+                    "No genres returned"
+                )
+                return False
+        else:
+            self.log_result(
+                "Genres List",
+                False,
+                error
+            )
+            return False
+
+    def run_all_tests(self):
+        """Run complete test suite"""
+        print("🎬 Starting Flick Backend API Test Suite")
+        print("=" * 60)
+        print()
+        
+        # Test basic connectivity
+        self.test_root_endpoint()
+        
+        # Test data initialization
+        seed_success = self.test_seed_data()
+        
+        # Test user endpoints
+        user_profile = self.test_user_profile()
+        watch_history = self.test_watch_history()
+        
+        # Test movie endpoints
+        trending_movies = self.test_trending_movies()
+        discovered_movies = self.test_discover_movies()
+        emergency_movies = self.test_emergency_recommendations()
+        
+        # Test detailed movie info
+        movie_details = self.test_movie_details()
+        
+        # Test watch history management
+        self.test_add_to_watch_history()
+        
+        # Test genres
+        self.test_genres_endpoint()
+        
+        # Print summary
+        print("=" * 60)
+        print("🎬 FLICK BACKEND TEST SUMMARY")
+        print("=" * 60)
+        print(f"✅ Passed: {len(self.passed_tests)}")
+        print(f"❌ Failed: {len(self.failed_tests)}")
+        print(f"📊 Success Rate: {len(self.passed_tests)/(len(self.passed_tests) + len(self.failed_tests)) * 100:.1f}%")
+        
+        if self.failed_tests:
+            print("\n❌ FAILED TESTS:")
+            for failure in self.failed_tests:
+                print(f"   • {failure}")
+        
+        print(f"\n📝 Total Tests Run: {len(self.test_results)}")
+        print(f"⏱️  Test Duration: {datetime.now().isoformat()}")
+        
+        return {
+            "total_tests": len(self.test_results),
+            "passed": len(self.passed_tests),
+            "failed": len(self.failed_tests),
+            "success_rate": len(self.passed_tests)/(len(self.passed_tests) + len(self.failed_tests)) * 100,
+            "failed_tests": self.failed_tests,
+            "passed_tests": self.passed_tests
+        }
+
+
+if __name__ == "__main__":
+    tester = FlickBackendTester()
+    results = tester.run_all_tests()
+    
+    # Exit with appropriate code
+    exit_code = 0 if results["failed"] == 0 else 1
+    exit(exit_code)
