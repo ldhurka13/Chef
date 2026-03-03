@@ -60,17 +60,15 @@ const MovieCard = ({ movie, onClick, index }) => {
 
       {/* Content */}
       <div className="absolute bottom-0 left-0 right-0 p-4">
-        {/* Match Percentage */}
+        {/* Match Percentage - Always Visible */}
         {movie.match_percentage && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: isHovered ? 1 : 0.8, y: 0 }}
-            className="mb-2"
-          >
-            <span className="text-flick-teal font-sans text-sm font-medium">
+          <div className="mb-2">
+            <span className="inline-block px-2 py-1 rounded-full bg-flick-teal/20 
+                           text-flick-teal font-sans text-sm font-medium
+                           border border-flick-teal/30">
               {movie.match_percentage}% Match
             </span>
-          </motion.div>
+          </div>
         )}
 
         {/* Title */}
@@ -78,18 +76,10 @@ const MovieCard = ({ movie, onClick, index }) => {
           {movie.title}
         </h3>
 
-        {/* Vibe Tag - Shows on Hover */}
-        <motion.p
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ 
-            opacity: isHovered ? 1 : 0, 
-            y: isHovered ? 0 : 10 
-          }}
-          transition={{ duration: 0.3 }}
-          className="text-flick-gold text-sm italic mt-2"
-        >
+        {/* Vibe Tag - Always Visible */}
+        <p className="text-flick-gold text-sm italic mt-1 line-clamp-1">
           {movie.vibe_tag || "Worth discovering"}
-        </motion.p>
+        </p>
 
         {/* Genres - Shows on Hover */}
         {movie.genres && movie.genres.length > 0 && (
