@@ -1,0 +1,167 @@
+{
+  "brand_identity": {
+    "name": "Flick",
+    "persona": "The Cinema Curator",
+    "tone": "High-Aesthetic Minimalism, Cinematic, Museum-like, Reverent",
+    "core_values": [
+      "No Clutter",
+      "Emotion First",
+      "Tactile Interactions",
+      "Cinematic Immersion"
+    ]
+  },
+  "typography": {
+    "font_family": {
+      "heading": "Playfair Display, serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "display": "text-5xl md:text-7xl font-light tracking-tight leading-none",
+      "h1": "text-4xl md:text-5xl font-normal tracking-tight",
+      "h2": "text-3xl md:text-4xl font-normal tracking-tight",
+      "h3": "text-2xl font-medium tracking-normal",
+      "body_lg": "text-lg leading-relaxed text-muted-foreground",
+      "body_base": "text-base leading-relaxed text-muted-foreground",
+      "caption": "text-sm tracking-wide uppercase text-muted-foreground/60"
+    },
+    "usage_rules": [
+      "Headings must use Playfair Display.",
+      "Body text must use Inter.",
+      "Avoid bold weights for Playfair Display; prefer Light (300) or Regular (400) for elegance.",
+      "Use strict tracking: 'tracking-tighter' for large headings, 'tracking-wide' for captions."
+    ]
+  },
+  "colors": {
+    "palette": {
+      "background": "#0A0A0B",
+      "surface": "#161618",
+      "surface_highlight": "#1F1F22",
+      "text_primary": "#E5E5E5",
+      "text_secondary": "#A1A1AA",
+      "accent_gold": "#C0B283",
+      "glow_teal": "#2DD4BF",
+      "glow_orange": "#F97316",
+      "sepia_overlay": "rgba(112, 66, 20, 0.15)"
+    },
+    "semantic": {
+      "bg_app": "bg-[#0A0A0B]",
+      "bg_card": "bg-[#161618]/80 backdrop-blur-sm",
+      "text_main": "text-[#E5E5E5]",
+      "text_muted": "text-[#A1A1AA]",
+      "border_subtle": "border-white/5",
+      "border_active": "border-[#C0B283]/50",
+      "interactive_glow": "shadow-[0_0_20px_-5px_rgba(45,212,191,0.3)]",
+      "safety_net_bg": "bg-[#1A1814]"
+    }
+  },
+  "visual_enhancers": {
+    "texture": {
+      "film_grain": "fixed inset-0 pointer-events-none z-50 opacity-[0.03] mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]",
+      "glassmorphism": "backdrop-blur-md bg-[#161618]/70 border border-white/5",
+      "vignette": "radial-gradient(circle at center, transparent 0%, #0A0A0B 100%)"
+    },
+    "shadows": {
+      "cinematic": "shadow-2xl shadow-black/80",
+      "glow_hover": "shadow-[0_0_30px_-5px_rgba(255,255,255,0.1)]"
+    },
+    "borders": {
+      "hairline": "border border-white/5",
+      "active": "border border-[#C0B283]/30"
+    }
+  },
+  "layout_strategy": {
+    "grid_system": {
+      "masonry": "columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6",
+      "bento": "grid grid-cols-1 md:grid-cols-4 gap-4"
+    },
+    "spacing": {
+      "section_gap": "py-24 md:py-32",
+      "component_gap": "gap-6 md:gap-8",
+      "container_padding": "px-4 md:px-8 max-w-7xl mx-auto"
+    },
+    "navigation": {
+      "type": "Floating Horizon",
+      "position": "fixed bottom-6 left-1/2 -translate-x-1/2 z-40",
+      "style": "h-14 px-6 rounded-full bg-[#161618]/80 backdrop-blur-xl border border-white/10 flex items-center gap-8 shadow-2xl"
+    }
+  },
+  "components": {
+    "VibeConsole": {
+      "description": "A modal interface for adjusting recommendation parameters.",
+      "structure": "Full-screen overlay with blur. Three vertical sliders (Brain Power, Mood, Energy).",
+      "style": "Sliders are tall vertical bars (h-64 w-12). Thumb is minimal or hidden (fill level indicates value). Active state glows Teal or Orange.",
+      "path": "/app/frontend/src/components/VibeConsole.js"
+    },
+    "MovieCard": {
+      "description": "Minimal poster presentation with hover reveal.",
+      "structure": "Image aspect-ratio 2/3. Hidden details that appear on hover.",
+      "interaction": "Hover: Scale 1.05, subtle glow, metadata fade in. Click: Open detail view.",
+      "path": "/app/frontend/src/components/MovieCard.js"
+    },
+    "EmergencyButton": {
+      "description": "'I Can't Even' button for instant comfort rewatch.",
+      "style": "Prominent, distinct from nav. Maybe a floating element or central nav item. Uses #C0B283 (Muted Gold).",
+      "interaction": "Click triggers 'Shutter Sound' and 'Flash' animation (white screen flash).",
+      "path": "/app/frontend/src/components/EmergencyButton.js"
+    },
+    "HeroSection": {
+      "description": "'Vibe of the Day' featured movie.",
+      "style": "Full viewport height (min-h-[70vh]). Immersive background image with gradient fade to black at bottom.",
+      "content": "Minimal text overlay: 'Vibe of the Day', Title, One-line synopsis.",
+      "path": "/app/frontend/src/components/HeroSection.js"
+    }
+  },
+  "motion": {
+    "page_transition": {
+      "type": "Cross-dissolve",
+      "duration": "0.5s",
+      "ease": "easeInOut"
+    },
+    "card_entrance": {
+      "type": "Staggered Fade & Scale",
+      "initial": { "opacity": 0, "scale": 0.95, "y": 20 },
+      "animate": { "opacity": 1, "scale": 1, "y": 0 },
+      "stagger": 0.05
+    },
+    "hover_effects": {
+      "scale": "transition-transform duration-500 ease-out hover:scale-105",
+      "glow": "transition-shadow duration-300 hover:shadow-[0_0_20px_rgba(45,212,191,0.2)]"
+    }
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-1 w-5 h-5 opacity-70 hover:opacity-100 transition-opacity"
+    },
+    "images": {
+      "placeholder_hero": "https://images.unsplash.com/photo-1771873679931-992e80181419?q=80&w=2000&auto=format&fit=crop",
+      "placeholder_poster": "https://images.unsplash.com/photo-1760385737558-41fd105bacf0?q=80&w=800&auto=format&fit=crop",
+      "texture_grain": "https://grainy-gradients.vercel.app/noise.svg"
+    }
+  },
+  "tech_stack": {
+    "frontend": "React, Tailwind CSS, Framer Motion",
+    "backend": "FastAPI, MongoDB",
+    "api": "TMDB API"
+  },
+  "instructions_to_main_agent": [
+    "Install 'lucide-react' and 'framer-motion' immediately.",
+    "Configure 'tailwind.config.js' to include the custom colors (#0A0A0B, #161618, #C0B283) and fonts.",
+    "Implement the 'Film Grain' overlay in 'App.js' or main layout as a fixed, pointer-events-none div.",
+    "Build the 'VibeConsole' as a Modal using Radix UI Dialog or similar primitive (headless), styled manually.",
+    "Ensure the 'Floating Horizon' nav bar is fixed at the bottom with glassmorphism.",
+    "Use 'framer-motion' <AnimatePresence> for page transitions (mode='wait').",
+    "Do not use default scrollbars. Hide them or style them thin and dark.",
+    "For the 'Safety Net' page, apply a CSS filter 'sepia(0.3)' to the container to give it a warm, nostalgic feel.",
+    "Implement the 'Shutter Flash' using a full-screen white div that flashes opacity 1 -> 0 in 100ms."
+  ],
+  "universal_guidelines": [
+    "Dark Mode Only: No light mode toggle.",
+    "No Gradients on Text: Keep text solid Platinum (#E5E5E5) for readability.",
+    "Center Alignment is for Titles Only: Align body text to left.",
+    "Vertical Rhythm: Use multiples of 4 (1rem) for spacing. Prefer loose spacing (gap-6, gap-8).",
+    "Micro-Interactions: Every clickable element must have a visible hover state (opacity change, scale, or color shift).",
+    "Images: Always use 'object-cover' and handle loading states with a skeleton pulse."
+  ]
+}
