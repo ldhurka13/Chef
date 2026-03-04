@@ -59,27 +59,6 @@ const UserDetails = ({ user, onUserUpdate }) => {
     fetchLetterboxdData();
   }, []);
 
-  // Auth guard
-  if (!user) {
-    return (
-      <main className="pb-24 pt-20 px-4 md:px-8">
-        <div className="max-w-2xl mx-auto text-center py-20">
-          <Users className="w-12 h-12 text-chef-muted/30 mx-auto mb-4" />
-          <h2 className="font-serif text-2xl text-chef-platinum mb-2">Sign in to edit your details</h2>
-          <p className="text-sm text-chef-muted mb-6">Log in or create an account to personalize your profile.</p>
-          <button
-            onClick={() => navigate("/")}
-            className="px-6 py-2.5 rounded-full bg-chef-teal/10 border border-chef-teal/20
-                     text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors"
-            data-testid="details-login-redirect"
-          >
-            Go Home
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   const fetchLetterboxdData = async () => {
     const token = localStorage.getItem("chef_token");
     if (!token) return;
@@ -181,6 +160,27 @@ const UserDetails = ({ user, onUserUpdate }) => {
   const avatarSrc = avatarUrl
     ? avatarUrl.startsWith("/api") ? `${process.env.REACT_APP_BACKEND_URL}${avatarUrl}` : avatarUrl
     : null;
+
+  // Auth guard (after all hooks)
+  if (!user) {
+    return (
+      <main className="pb-24 pt-20 px-4 md:px-8">
+        <div className="max-w-2xl mx-auto text-center py-20">
+          <Users className="w-12 h-12 text-chef-muted/30 mx-auto mb-4" />
+          <h2 className="font-serif text-2xl text-chef-platinum mb-2">Sign in to edit your details</h2>
+          <p className="text-sm text-chef-muted mb-6">Log in or create an account to personalize your profile.</p>
+          <button
+            onClick={() => navigate("/")}
+            className="px-6 py-2.5 rounded-full bg-chef-teal/10 border border-chef-teal/20
+                     text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors"
+            data-testid="details-login-redirect"
+          >
+            Go Home
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="pb-24 pt-20 px-4 md:px-8">
