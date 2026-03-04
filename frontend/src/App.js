@@ -22,6 +22,7 @@ import AuthModal from "./components/AuthModal";
 import ProfileModal from "./components/ProfileModal";
 import LocationPermissionModal from "./components/LocationPermissionModal";
 import UserDetails from "./components/UserDetails";
+import ResetPassword from "./components/ResetPassword";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -551,6 +552,10 @@ function AppContent() {
                   onUserUpdate={(updated) => setAuthUser(updated)}
                 />
               }
+            />
+            <Route
+              path="/reset-password"
+              element={<ResetPassword />}
             />
           </Routes>
         </motion.div>

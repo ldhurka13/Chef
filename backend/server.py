@@ -15,6 +15,8 @@ import time
 import json
 import hashlib
 import secrets
+import asyncio
+import resend
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -33,6 +35,12 @@ IMAGE_BASE_URL = "https://image.tmdb.org/t/p/"
 RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY')
 STREAMING_API_BASE = "https://streaming-availability.p.rapidapi.com"
 ALLOWED_SERVICES = {"netflix", "prime", "disney", "hulu", "apple", "hbo", "paramount"}
+
+# Resend email config
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
 
 # Cache for TMDB requests
 tmdb_cache = {}
@@ -133,6 +141,13 @@ class LocationPermissionUpdate(BaseModel):
     location_permission: str  # "always", "ask", "never"
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
 
 # ============ AUTH HELPERS ============
 
@@ -488,10 +503,10 @@ async def login(data: UserLogin):
     """Login user"""
     user = await db.auth_users.find_one({"email": data.email.lower()})
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=404, detail="No account found with this email address")
     
     if not verify_password(data.password, user.get("password_hash", "")):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Incorrect password")
     
     # Create token
     token = create_token(user["id"])
@@ -581,6 +596,109 @@ async def update_profile(data: UserUpdate, current_user: dict = Depends(get_curr
 async def logout():
     """Logout (client should delete token)"""
     return {"message": "Logged out successfully"}
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """Send password reset email"""
+    email = data.email.lower().strip()
+    user = await db.auth_users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="No account found with this email address")
+    
+    # Generate a secure reset token
+    reset_token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    
+    # Store reset token in DB
+    await db.password_resets.update_one(
+        {"user_id": user["id"]},
+        {"$set": {
+            "user_id": user["id"],
+            "email": email,
+            "token": reset_token,
+            "expires_at": expires_at,
+            "used": False
+        }},
+        upsert=True
+    )
+    
+    # Build reset URL
+    frontend_url = os.environ.get("FRONTEND_URL", "https://vibe-picks.preview.emergentagent.com")
+    reset_url = f"{frontend_url}/reset-password?token={reset_token}"
+    
+    # Send email via Resend
+    if RESEND_API_KEY:
+        try:
+            params = {
+                "from": SENDER_EMAIL,
+                "to": [email],
+                "subject": "Chef - Reset Your Password",
+                "html": f"""
+                <div style="font-family: Georgia, serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #0a0a0a; color: #e5e5e5;">
+                    <h1 style="font-size: 24px; color: #f5f0e8; margin-bottom: 16px;">Reset your password</h1>
+                    <p style="font-size: 14px; line-height: 1.6; color: #999;">
+                        We received a request to reset the password for your Chef account. Click the button below to set a new password.
+                    </p>
+                    <a href="{reset_url}" style="display: inline-block; margin: 24px 0; padding: 12px 32px; background: #2dd4bf22; border: 1px solid #2dd4bf44; color: #2dd4bf; text-decoration: none; border-radius: 9999px; font-size: 14px;">
+                        Reset Password
+                    </a>
+                    <p style="font-size: 12px; color: #666; margin-top: 24px;">
+                        This link expires in 1 hour. If you didn't request this, you can ignore this email.
+                    </p>
+                </div>
+                """
+            }
+            await asyncio.to_thread(resend.Emails.send, params)
+            logging.info(f"Password reset email sent to {email}")
+        except Exception as e:
+            logging.error(f"Failed to send reset email: {e}")
+            raise HTTPException(status_code=500, detail="Failed to send reset email. Please try again.")
+    else:
+        logging.warning(f"Resend not configured. Reset URL: {reset_url}")
+    
+    return {"message": "Password reset link sent to your email"}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """Reset password using token from email"""
+    record = await db.password_resets.find_one(
+        {"token": data.token, "used": False},
+        {"_id": 0}
+    )
+    
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+    
+    # Check expiry
+    try:
+        expires_str = record["expires_at"]
+        # Handle timezone-aware and naive datetime strings
+        expires = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
+        # Make expires timezone-aware if it's naive
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires:
+            raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+    except (ValueError, KeyError):
+        raise HTTPException(status_code=400, detail="Invalid reset link")
+    
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    # Update password
+    new_hash = hash_password(data.new_password)
+    await db.auth_users.update_one(
+        {"id": record["user_id"]},
+        {"$set": {"password_hash": new_hash}}
+    )
+    
+    # Mark token as used
+    await db.password_resets.update_one(
+        {"token": data.token},
+        {"$set": {"used": True}}
+    )
+    
+    return {"message": "Password reset successfully. You can now log in."}
 
 @api_router.put("/auth/location-permission")
 async def update_location_permission(data: LocationPermissionUpdate, current_user: dict = Depends(get_current_user)):
