@@ -181,23 +181,11 @@ function AppContent() {
                     onMovieClick={handleMovieClick}
                   />
                   
-                  {/* Emergency Button */}
-                  <EmergencyButton onClick={handleEmergency} />
-                  
                   {/* Movie Discovery Grid */}
                   <section className="px-4 md:px-8 max-w-7xl mx-auto mt-12">
-                    <div className="flex items-center justify-between mb-8">
-                      <h2 className="font-serif text-2xl md:text-3xl tracking-tight">
-                        Curated for You
-                      </h2>
-                      <button
-                        onClick={() => setVibeConsoleOpen(true)}
-                        className="text-flick-muted hover:text-flick-platinum transition-colors text-sm tracking-wide uppercase"
-                        data-testid="tune-vibe-btn"
-                      >
-                        Tune Your Vibe
-                      </button>
-                    </div>
+                    <h2 className="font-serif text-2xl md:text-3xl tracking-tight mb-8">
+                      Curated for You
+                    </h2>
                     
                     <MovieGrid 
                       movies={discoveredMovies}
