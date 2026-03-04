@@ -45,6 +45,10 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - `PUT /api/auth/profile` - Update profile
 - `PUT /api/auth/location-permission` - Update location preference (always/ask/never)
 - `GET /api/movies/{movie_id}/streaming?country=us` — Streaming availability (Movies of the Night API, 24hr MongoDB cache)
+- `GET /api/movies/search-tmdb?query=...` — TMDB movie search (for favorite movie picker)
+- `POST /api/auth/upload-avatar` — Profile photo upload (JPEG/PNG/WebP, max 2MB)
+- `POST /api/auth/import-letterboxd` — Letterboxd CSV import
+- `GET /api/auth/letterboxd-data` — Get imported Letterboxd data
 - `POST /api/movies/discover` - Curated movies by vibe params
 - `GET /api/movies/trending` - Trending movies
 - `GET /api/movies/sections/{section}` - Section movies (chefs-special, certified-swangy, all-time-classics, explore, marathon)
@@ -54,7 +58,8 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - `GET /api/movies/{movie_id}` - Movie details
 
 ## DB Schema (MongoDB)
-- **auth_users**: {id, email, username, password_hash, birth_year, birth_date, avatar_url, favorite_genres, location_permission, location, created_at}
+- **auth_users**: {id, email, username, password_hash, birth_year, birth_date, avatar_url, favorite_genres, location_permission, location, gender, bio, favorite_actors, favorite_movies, letterboxd_connected, letterboxd_count, created_at}
+- **letterboxd_imports**: {user_id, entries, total_movies, rated_movies, imported_at, filename}
 - **users**: {id, username, birth_year, created_at} (mock user for demo)
 - **watch_history**: {id, user_id, tmdb_id, user_rating, last_watched_date, watch_count, title, poster_path}
 
@@ -79,6 +84,7 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] Token key renamed from flick_token to chef_token
 - [x] Comfort feature uses real weather data (Open-Meteo API)
 - [x] Streaming Availability — "Where to Watch" in movie detail modal (Movies of the Night API, MongoDB cached, 7 services)
+- [x] User Details page (/details) — Gender, Bio, Profile Photo upload, Favorite Actors, Top 5 Favorite Movies (TMDB search), Connect Letterboxd (CSV import)
 
 ## Upcoming Tasks (P1)
 - [x] Integrate Location/Time into "Comfort" Logic - uses Open-Meteo weather API with real lat/lng, time-of-day scoring, weather-aware vibe tags
