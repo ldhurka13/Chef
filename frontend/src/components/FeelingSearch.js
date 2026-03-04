@@ -89,8 +89,8 @@ const FeelingSearch = ({ onMovieClick }) => {
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder={placeholderSuggestions[placeholderIndex]}
-            className="flex-1 bg-transparent text-flick-platinum placeholder-flick-muted/40
-                       text-sm font-light tracking-wide
+            className="flex-1 bg-transparent text-flick-platinum placeholder-flick-platinum/50
+                       text-sm font-normal tracking-wider
                        focus:outline-none"
             data-testid="feeling-search-input"
           />
