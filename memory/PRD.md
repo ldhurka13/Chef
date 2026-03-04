@@ -45,6 +45,10 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - `PUT /api/auth/profile` - Update profile
 - `PUT /api/auth/location-permission` - Update location preference (always/ask/never)
 - `GET /api/movies/{movie_id}/streaming?country=us` — Streaming availability (Movies of the Night API, 24hr MongoDB cache)
+- `GET /api/user/watch-history` — Get authenticated user's watch history (sorted by most recent)
+- `POST /api/user/watch-history` — Add movie to history (rating 0-10 float, watch date, tracks multiple watches)
+- `PUT /api/user/watch-history/{tmdb_id}` — Update rating or add watch date
+- `DELETE /api/user/watch-history/{tmdb_id}` — Remove movie from history
 - `GET /api/movies/search-tmdb?query=...` — TMDB movie search (for favorite movie picker)
 - `POST /api/auth/upload-avatar` — Profile photo upload (JPEG/PNG/WebP, max 2MB)
 - `POST /api/auth/import-letterboxd` — Letterboxd CSV import
@@ -85,6 +89,8 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] Comfort feature uses real weather data (Open-Meteo API)
 - [x] Streaming Availability — "Where to Watch" in movie detail modal (Movies of the Night API, MongoDB cached, 7 services)
 - [x] User Details page (/details) — Gender, Bio, Profile Photo upload, Favorite Actors, Top 5 Favorite Movies (TMDB search), Connect Letterboxd (CSV import)
+- [x] Streaming Services selection — 7-service checkbox grid (Netflix, Prime, Disney+, Hulu, Apple TV+, Max, Paramount+) persisted to user profile
+- [x] Watch History CRUD — Add movies via TMDB search, rate 0-10 with 0.1 increments, track multiple watch dates per movie, remove movies, all per-authenticated user
 
 ## Upcoming Tasks (P1)
 - [x] Integrate Location/Time into "Comfort" Logic - uses Open-Meteo weather API with real lat/lng, time-of-day scoring, weather-aware vibe tags
