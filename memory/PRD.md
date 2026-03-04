@@ -45,6 +45,8 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - `PUT /api/auth/profile` - Update profile
 - `PUT /api/auth/location-permission` - Update location preference (always/ask/never)
 - `GET /api/movies/{movie_id}/streaming?country=us` — Streaming availability (Movies of the Night API, 24hr MongoDB cache)
+- `POST /api/auth/forgot-password` — Generate reset token and send email via Resend
+- `POST /api/auth/reset-password` — Validate token and set new password
 - `GET /api/user/watch-history` — Get authenticated user's watch history (sorted by most recent)
 - `POST /api/user/watch-history` — Add movie to history (rating 0-10 float, watch date, tracks multiple watches)
 - `PUT /api/user/watch-history/{tmdb_id}` — Update rating or add watch date
@@ -91,6 +93,9 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] User Details page (/details) — Gender, Bio, Profile Photo upload, Favorite Actors, Top 5 Favorite Movies (TMDB search), Connect Letterboxd (CSV import)
 - [x] Streaming Services selection — 7-service checkbox grid (Netflix, Prime, Disney+, Hulu, Apple TV+, Max, Paramount+) persisted to user profile
 - [x] Watch History CRUD — Add movies via TMDB search, rate 0-10 with 0.1 increments, track multiple watch dates per movie, remove movies, all per-authenticated user
+- [x] Forgot Password — Email reset link via Resend API, token-based reset flow with 1hr expiry
+- [x] Login error messages — "No account found with this email address" (404) vs "Incorrect password" (401)
+- [x] Reset Password page (/reset-password?token=...) — New password + confirm, validates token expiry
 
 ## Upcoming Tasks (P1)
 - [x] Integrate Location/Time into "Comfort" Logic - uses Open-Meteo weather API with real lat/lng, time-of-day scoring, weather-aware vibe tags
