@@ -76,7 +76,7 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] Token key renamed from flick_token to chef_token
 
 ## Upcoming Tasks (P1)
-- [ ] Integrate Location/Time into "Comfort" Logic - use time-of-day and location/climate for context-aware comfort recommendations
+- [x] Integrate Location/Time into "Comfort" Logic - uses Open-Meteo weather API with real lat/lng, time-of-day scoring, weather-aware vibe tags
 
 ## Future Tasks (P2)
 - [ ] JustWatch API Integration - "Where to Watch" on movie cards
