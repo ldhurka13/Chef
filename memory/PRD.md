@@ -1,92 +1,85 @@
-# Flick - Context-Aware Movie Recommendation Engine
-## Product Requirements Document
+# Chef - Context-Aware Movie Recommendation Engine
 
-### Original Problem Statement
-Build "Flick," a context-aware movie recommendation engine using TMDB API with:
-- Vibe Console with sliders for Brain Power, Mood, Energy
-- "I Can't Even" Emergency Button for instant rewatch recommendations
-- Movie discovery with Match % and Vibe Tags
-- Flick Scoring Algorithm with Rewatchability, Nostalgia Bonus, Complexity Penalty
-- Premium cinematic dark theme
+## Original Problem Statement
+Build a context-aware movie recommendation engine called "Chef" with:
+- A premium, cinematic dark-themed UI
+- Vibe Console with mood sliders for personalized recommendations
+- Multiple discovery sections (Curated, Chef's Special, Certified Swangy, All Time Classics, Explore, Marathon)
+- Semantic feeling search bar
+- "Hangry Hail Mary" random picks
+- "Comfort Snacks" for familiar favorites
+- Full user authentication with birth date and location
+- TMDB integration for movie data
 
-### Architecture
-- **Frontend**: React + Tailwind CSS + Framer Motion
-- **Backend**: FastAPI + MongoDB
-- **External API**: TMDB API for movie data
-- **Database**: MongoDB (users, watch_history collections)
+## Tech Stack
+- **Frontend:** React + Tailwind CSS + Framer Motion
+- **Backend:** FastAPI (Python)
+- **Database:** MongoDB
+- **Auth:** JWT tokens (custom implementation)
+- **External API:** TMDB
 
-### User Personas
-1. **Casual Viewer**: Tired after work, wants easy comfort viewing
-2. **Film Enthusiast**: Looking for quality cinema with depth
-3. **Social Watcher**: Needs crowd-pleaser recommendations
+## Architecture
+```
+/app/
+├── backend/
+│   ├── .env (MONGO_URL, DB_NAME, TMDB_API_KEY, CORS_ORIGINS)
+│   ├── requirements.txt
+│   ├── server.py (all endpoints, models, business logic)
+│   └── tests/test_auth.py
+├── frontend/
+│   ├── .env (REACT_APP_BACKEND_URL)
+│   ├── package.json
+│   ├── tailwind.config.js
+│   └── src/
+│       ├── App.js (main component, state management)
+│       ├── index.css
+│       └── components/ (AuthModal, LocationPermissionModal, FloatingNav, etc.)
+└── memory/
+    └── PRD.md
+```
 
-### Core Requirements (Static)
-- [x] TMDB API integration for movie discovery
-- [x] Flick Scoring Algorithm implementation
-- [x] Vibe Console with 3 parameters
-- [x] Emergency Rewatch feature
-- [x] Watch History management
-- [x] Dark cinematic UI theme
+## Key API Endpoints
+- `POST /api/auth/register` - Sign up (email, password, username, birth_year, birth_date)
+- `POST /api/auth/login` - Sign in (returns token + user with location_permission)
+- `GET /api/auth/me` - Get current user
+- `PUT /api/auth/profile` - Update profile
+- `PUT /api/auth/location-permission` - Update location preference (always/ask/never)
+- `POST /api/movies/discover` - Curated movies by vibe params
+- `GET /api/movies/trending` - Trending movies
+- `GET /api/movies/sections/{section}` - Section movies (chefs-special, certified-swangy, all-time-classics, explore, marathon)
+- `GET /api/movies/random-picks` - Random 3 picks
+- `POST /api/movies/comfort` - Comfort movies
+- `POST /api/movies/feeling-search` - Semantic search
+- `GET /api/movies/{movie_id}` - Movie details
 
-### What's Been Implemented (March 2026)
+## DB Schema (MongoDB)
+- **auth_users**: {id, email, username, password_hash, birth_year, birth_date, avatar_url, favorite_genres, location_permission, location, created_at}
+- **users**: {id, username, birth_year, created_at} (mock user for demo)
+- **watch_history**: {id, user_id, tmdb_id, user_rating, last_watched_date, watch_count, title, poster_path}
 
-#### Backend (server.py)
-- [x] MongoDB models: Users, WatchHistory
-- [x] TMDB API service with caching
-- [x] Flick Scoring Algorithm:
-  - Base Score from TMDB rating
-  - Rewatchability Multiplier (days since watched, user rating)
-  - Nostalgia Bonus (+2.0 for birth_year+12 to +22 releases)
-  - Complexity Penalty (energy-based genre filtering)
-- [x] **Feeling Search (Chat Feature)**:
-  - Natural language mood parsing
-  - FEELING_MAPPINGS for 40+ emotions/vibes
-  - Semantic search with genre/keyword matching
-- [x] API Endpoints:
-  - GET /api/movies/trending
-  - POST /api/movies/discover (with vibe params)
-  - POST /api/movies/feeling-search (NEW - Chat feature)
-  - GET /api/movies/emergency
-  - GET /api/movies/{id}
-  - GET /api/user/profile
-  - GET/POST/DELETE /api/user/watch-history
-  - POST /api/seed-data
+## What's Been Implemented
+- [x] Full dark cinematic UI with Playfair Display / Inter fonts
+- [x] Hero section with trending movie
+- [x] 6-section navigation (Curated, Chef's Special, Swangy, Classics, Explore, Marathon)
+- [x] Floating bottom nav (Home, Vibe, Random, History, Comfort)
+- [x] Vibe Console with mood/energy/brain power sliders
+- [x] "Hangry Hail Mary" random picks modal
+- [x] "Comfort Snacks" modal
+- [x] Semantic feeling search bar
+- [x] Movie detail modal with trailer, cast, similar
+- [x] Watch history tracking
+- [x] JWT authentication (signup + login)
+- [x] Birth Date field on signup (full date, not just year)
+- [x] App renamed from "Flick" to "Chef"
+- [x] Location Permission Modal (Always / Ask Every Time / Never)
+- [x] Location permission stored in localStorage + backend
+- [x] Token key renamed from flick_token to chef_token
 
-#### Frontend Components
-- [x] **FeelingSearch** - Transparent search bar at top with suggestions
-- [x] HeroSection - "Vibe of the Day" featured movie
-- [x] VibeConsole - Modal with vertical sliders
-- [x] EmergencyButton - "I Can't Even" with shutter flash
-- [x] MovieGrid - Masonry layout for movie cards
-- [x] MovieCard - Poster with Match % and Vibe Tags
-- [x] MovieDetail - Full details modal with trailer
-- [x] FloatingNav - Bottom navigation bar
-- [x] SafetyNet - Sepia-toned watch history
-- [x] FilmGrain - Subtle texture overlay
-- [x] ShutterFlash - Camera flash animation
+## Upcoming Tasks (P1)
+- [ ] Integrate Location/Time into "Comfort" Logic - use time-of-day and location/climate for context-aware comfort recommendations
 
-### Prioritized Backlog
-
-#### P0 (Done)
-- [x] Core recommendation engine
-- [x] TMDB integration
-- [x] Vibe Console
-- [x] Emergency rewatch feature
-
-#### P1 (Next)
-- [ ] JustWatch API integration for "Where to Watch"
-- [ ] User authentication (optional)
-- [ ] Pagination for movie discovery
-- [ ] Search functionality
-
-#### P2 (Future)
-- [ ] TV Show support
-- [ ] Social sharing features
-- [ ] Watchlist functionality
-- [ ] Push notifications for trending movies
-
-### Next Tasks
-1. Integrate JustWatch/RapidAPI for streaming availability
-2. Add pagination to discover endpoint
-3. Implement movie search
-4. Add user preferences persistence
+## Future Tasks (P2)
+- [ ] JustWatch API Integration - "Where to Watch" on movie cards
+- [ ] Refine Recommendation Algorithm - Rewatchability Multiplier, Complexity Penalty
+- [ ] Refactor App.js into React Context providers
+- [ ] Split backend/server.py into routers, models, services

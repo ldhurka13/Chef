@@ -139,7 +139,7 @@ function AppContent() {
 
   // Auth functions
   const checkAuth = async () => {
-    const token = localStorage.getItem("flick_token");
+    const token = localStorage.getItem("chef_token");
     if (token) {
       try {
         const res = await axios.get(`${API}/auth/me`, {
@@ -153,7 +153,7 @@ function AppContent() {
           requestLocationData().then(loc => { if (loc) setUserLocation(loc); });
         }
       } catch (error) {
-        localStorage.removeItem("flick_token");
+        localStorage.removeItem("chef_token");
       }
     }
   };
@@ -162,7 +162,7 @@ function AppContent() {
     setAuthLoading(true);
     try {
       const res = await axios.post(`${API}/auth/login`, { email, password });
-      localStorage.setItem("flick_token", res.data.token);
+      localStorage.setItem("chef_token", res.data.token);
       setAuthUser(res.data.user);
       setAuthModalOpen(false);
       
@@ -199,7 +199,7 @@ function AppContent() {
       const res = await axios.post(`${API}/auth/register`, { 
         email, password, username, birth_year: birthYear, birth_date: birthDate || null
       });
-      localStorage.setItem("flick_token", res.data.token);
+      localStorage.setItem("chef_token", res.data.token);
       setAuthUser(res.data.user);
       setAuthModalOpen(false);
       
@@ -220,7 +220,7 @@ function AppContent() {
     localStorage.setItem("chef_location_perm", option);
     
     // Update backend
-    const token = localStorage.getItem("flick_token");
+    const token = localStorage.getItem("chef_token");
     if (token) {
       let locationData = {};
       
@@ -246,7 +246,7 @@ function AppContent() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("flick_token");
+    localStorage.removeItem("chef_token");
     localStorage.removeItem("chef_location_perm");
     setAuthUser(null);
     setUserLocation(null);
@@ -254,7 +254,7 @@ function AppContent() {
   };
 
   const handleUpdateProfile = async (data) => {
-    const token = localStorage.getItem("flick_token");
+    const token = localStorage.getItem("chef_token");
     try {
       const res = await axios.put(`${API}/auth/profile`, data, {
         headers: { Authorization: `Bearer ${token}` }
