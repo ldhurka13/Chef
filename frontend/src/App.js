@@ -416,16 +416,23 @@ function AppContent() {
       <FilmGrain />
       <ShutterFlash show={showFlash} />
       
-      {/* Top Bar - Search and User Menu */}
-      <div className="fixed top-0 left-0 right-0 z-30 px-4 md:px-8 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          {/* Feeling Search */}
-          <div className="flex-1 max-w-xl">
-            <FeelingSearch onMovieClick={handleMovieClick} />
+      {/* Top Bar - Logo, Search, User Menu */}
+      <div className="fixed top-0 left-0 right-0 z-30 px-4 md:px-8 py-3">
+        <div className="max-w-7xl mx-auto flex items-center gap-4">
+          {/* Logo */}
+          <a href="/" className="flex-shrink-0" data-testid="chef-logo">
+            <img src="/logo.png" alt="Chef" className="h-14 w-14 object-contain -rotate-12" />
+          </a>
+          
+          {/* Feeling Search - centered */}
+          <div className="flex-1 flex justify-center">
+            <div className="w-full max-w-xl">
+              <FeelingSearch onMovieClick={handleMovieClick} />
+            </div>
           </div>
           
           {/* User Menu */}
-          <div className="ml-4">
+          <div className="flex-shrink-0">
             <UserMenu
               user={authUser}
               onLogout={handleLogout}
