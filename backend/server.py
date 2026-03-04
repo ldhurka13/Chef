@@ -670,6 +670,161 @@ async def get_random_movie_picks():
     
     return {"results": recommendations[:3]}
 
+class ComfortRequest(BaseModel):
+    hour: int = 12  # Hour of day (0-23)
+    is_cold: bool = False  # Weather condition
+    is_rainy: bool = False
+
+# Cache for comfort recommendations (stable unless history changes)
+comfort_cache = {}
+
+@api_router.post("/movies/comfort")
+async def get_comfort_movies(request: ComfortRequest):
+    """
+    Comfort Movies - Stable recommendations based on:
+    1. User's most re-watched and highest rated movies
+    2. Time of day (later = user more tired, prefer lighter content)
+    3. Weather/climate conditions
+    
+    Returns same 3 movies unless watch history changes.
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    user = await db.users.find_one({"username": "flick_user"}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user_id = user["id"]
+    
+    # Get watch history hash to detect changes
+    watch_history = await db.watch_history.find(
+        {"user_id": user_id},
+        {"_id": 0}
+    ).to_list(100)
+    
+    # Create a hash of watch history to detect changes
+    history_hash = hash(frozenset(
+        (m.get("tmdb_id"), m.get("user_rating"), m.get("watch_count")) 
+        for m in watch_history
+    ))
+    
+    # Check cache
+    cache_key = f"{user_id}_{request.hour // 6}"  # Cache by time period (6-hour blocks)
+    cached = comfort_cache.get(cache_key)
+    if cached and cached.get("history_hash") == history_hash:
+        return {"results": cached["movies"], "cached": True}
+    
+    # Calculate comfort scores for each watched movie
+    comfort_movies = []
+    
+    for movie in watch_history:
+        rating = movie.get("user_rating", 5)
+        watch_count = movie.get("watch_count", 1)
+        
+        # Base comfort score: combination of rating and rewatch count
+        # Rewatched movies are comfort movies
+        comfort_score = (rating * 1.5) + (watch_count * 3)
+        
+        # Time of day adjustment
+        # Late night (22-6): prefer lighter, familiar content
+        # Evening (18-22): good for any comfort movie
+        # Day (6-18): slightly lower comfort need
+        if request.hour >= 22 or request.hour < 6:
+            comfort_score *= 1.3  # Late night boost
+        elif request.hour >= 18:
+            comfort_score *= 1.1  # Evening boost
+        
+        # Weather adjustment
+        if request.is_cold or request.is_rainy:
+            comfort_score *= 1.2  # Cozy weather boost
+        
+        # Only consider movies rated 7+ as true comfort movies
+        if rating >= 7:
+            comfort_movies.append({
+                **movie,
+                "comfort_score": comfort_score
+            })
+    
+    # Sort by comfort score
+    comfort_movies.sort(key=lambda x: x["comfort_score"], reverse=True)
+    
+    # Take top 3
+    top_comfort = comfort_movies[:3]
+    
+    # Enrich with TMDB data
+    enriched = []
+    for movie in top_comfort:
+        tmdb_id = movie.get("tmdb_id")
+        details = tmdb_request(f"/movie/{tmdb_id}")
+        
+        # Generate comfort-specific vibe tag
+        watch_count = movie.get("watch_count", 1)
+        if watch_count >= 3:
+            vibe_tag = "Your go-to comfort classic"
+        elif movie.get("user_rating", 0) >= 9:
+            vibe_tag = "A certified favorite"
+        elif request.hour >= 22 or request.hour < 6:
+            vibe_tag = "Perfect for late night unwinding"
+        elif request.is_rainy:
+            vibe_tag = "Ideal for a rainy day"
+        else:
+            vibe_tag = "Comfort food for your soul"
+        
+        if details:
+            enriched.append({
+                "id": tmdb_id,
+                "tmdb_id": tmdb_id,
+                "title": details.get("title", movie.get("title", "Unknown")),
+                "poster_url": get_image_url(details.get("poster_path"), "w500"),
+                "backdrop_url": get_image_url(details.get("backdrop_path"), "w1280"),
+                "overview": details.get("overview", ""),
+                "user_rating": movie.get("user_rating"),
+                "watch_count": watch_count,
+                "vibe_tag": vibe_tag,
+                "comfort_score": round(movie.get("comfort_score", 0), 1)
+            })
+        else:
+            enriched.append({
+                **movie,
+                "poster_url": get_image_url(movie.get("poster_path"), "w500") if movie.get("poster_path") else None,
+                "vibe_tag": vibe_tag
+            })
+    
+    # If not enough comfort movies, add highest rated from history
+    if len(enriched) < 3:
+        remaining_needed = 3 - len(enriched)
+        existing_ids = {m.get("tmdb_id") for m in enriched}
+        
+        # Get remaining high-rated movies
+        for movie in watch_history:
+            if movie.get("tmdb_id") not in existing_ids and movie.get("user_rating", 0) >= 6:
+                tmdb_id = movie.get("tmdb_id")
+                details = tmdb_request(f"/movie/{tmdb_id}")
+                if details:
+                    enriched.append({
+                        "id": tmdb_id,
+                        "tmdb_id": tmdb_id,
+                        "title": details.get("title", movie.get("title", "Unknown")),
+                        "poster_url": get_image_url(details.get("poster_path"), "w500"),
+                        "backdrop_url": get_image_url(details.get("backdrop_path"), "w1280"),
+                        "user_rating": movie.get("user_rating"),
+                        "watch_count": movie.get("watch_count", 1),
+                        "vibe_tag": "From your collection",
+                        "comfort_score": 0
+                    })
+                    if len(enriched) >= 3:
+                        break
+    
+    # Cache the results
+    comfort_cache[cache_key] = {
+        "movies": enriched[:3],
+        "history_hash": history_hash
+    }
+    
+    return {"results": enriched[:3], "cached": False}
+
 @api_router.get("/movies/{movie_id}")
 async def get_movie_details(movie_id: int):
     """Get detailed movie information"""

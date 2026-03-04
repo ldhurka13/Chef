@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Home, Sliders, Shuffle, Film } from "lucide-react";
+import { Home, Sliders, Shuffle, Film, Coffee } from "lucide-react";
 
 const NavItem = ({ icon: Icon, label, isActive, onClick }) => {
   return (
@@ -37,7 +37,7 @@ const NavItem = ({ icon: Icon, label, isActive, onClick }) => {
   );
 };
 
-const FloatingNav = ({ onVibeClick, onRandomClick }) => {
+const FloatingNav = ({ onVibeClick, onRandomClick, onComfortClick }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -89,10 +89,10 @@ const FloatingNav = ({ onVibeClick, onRandomClick }) => {
       />
       
       <NavItem
-        icon={Shuffle}
-        label="Random"
+        icon={Coffee}
+        label="Comfort"
         isActive={false}
-        onClick={onRandomClick}
+        onClick={onComfortClick}
       />
     </nav>
   );
