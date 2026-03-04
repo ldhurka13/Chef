@@ -38,9 +38,14 @@ Build "Flick," a context-aware movie recommendation engine using TMDB API with:
   - Rewatchability Multiplier (days since watched, user rating)
   - Nostalgia Bonus (+2.0 for birth_year+12 to +22 releases)
   - Complexity Penalty (energy-based genre filtering)
+- [x] **Feeling Search (Chat Feature)**:
+  - Natural language mood parsing
+  - FEELING_MAPPINGS for 40+ emotions/vibes
+  - Semantic search with genre/keyword matching
 - [x] API Endpoints:
   - GET /api/movies/trending
   - POST /api/movies/discover (with vibe params)
+  - POST /api/movies/feeling-search (NEW - Chat feature)
   - GET /api/movies/emergency
   - GET /api/movies/{id}
   - GET /api/user/profile
@@ -48,6 +53,7 @@ Build "Flick," a context-aware movie recommendation engine using TMDB API with:
   - POST /api/seed-data
 
 #### Frontend Components
+- [x] **FeelingSearch** - Transparent search bar at top with suggestions
 - [x] HeroSection - "Vibe of the Day" featured movie
 - [x] VibeConsole - Modal with vertical sliders
 - [x] EmergencyButton - "I Can't Even" with shutter flash
