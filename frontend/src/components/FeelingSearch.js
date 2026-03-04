@@ -62,22 +62,22 @@ const FeelingSearch = ({ onMovieClick }) => {
   return (
     <>
       {/* Search Bar */}
-      <div className="relative z-30 w-full max-w-2xl mx-auto px-4">
+      <div className="relative z-30 w-full max-w-xl mx-auto px-4">
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className={`relative flex items-center gap-3 px-6 py-4 rounded-full
-                     transition-all duration-500 ease-out
-                     ${isFocused 
-                       ? 'bg-flick-surface/80 backdrop-blur-xl border border-flick-teal/30 shadow-glow-teal' 
-                       : 'bg-flick-surface/40 backdrop-blur-md border border-white/10'}`}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className={`relative flex items-center gap-2 px-4 py-2
+                     transition-all duration-300 ease-out
+                     border-b ${isFocused 
+                       ? 'border-flick-teal/50' 
+                       : 'border-white/20'}`}
         >
           {/* Sparkle Icon */}
           <Sparkles 
-            className={`w-5 h-5 flex-shrink-0 transition-colors duration-300
-                       ${isFocused ? 'text-flick-teal' : 'text-flick-muted'}`}
-            strokeWidth={1.5}
+            className={`w-4 h-4 flex-shrink-0 transition-colors duration-300
+                       ${isFocused ? 'text-flick-teal' : 'text-flick-muted/60'}`}
+            strokeWidth={1}
           />
           
           {/* Input */}
@@ -89,36 +89,37 @@ const FeelingSearch = ({ onMovieClick }) => {
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder={placeholderSuggestions[placeholderIndex]}
-            className="flex-1 bg-transparent text-flick-platinum placeholder-flick-muted/50
-                       text-base md:text-lg font-light tracking-wide
+            className="flex-1 bg-transparent text-flick-platinum placeholder-flick-muted/40
+                       text-sm font-light tracking-wide
                        focus:outline-none"
             data-testid="feeling-search-input"
           />
           
-          {/* Clear/Search Button */}
+          {/* Clear Button */}
           {query ? (
             <button
               onClick={handleClear}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors"
+              className="p-1 hover:text-flick-platinum transition-colors"
               data-testid="feeling-search-clear"
             >
-              <X className="w-4 h-4 text-flick-muted" strokeWidth={1.5} />
+              <X className="w-3 h-3 text-flick-muted" strokeWidth={1.5} />
             </button>
           ) : null}
           
+          {/* Search Button */}
           <button
             onClick={handleSearch}
             disabled={!query.trim() || isSearching}
-            className={`p-3 rounded-full transition-all duration-300
+            className={`p-1.5 transition-all duration-300
                        ${query.trim() 
-                         ? 'bg-flick-teal/20 text-flick-teal hover:bg-flick-teal/30' 
-                         : 'bg-white/5 text-flick-muted'}`}
+                         ? 'text-flick-teal hover:text-flick-platinum' 
+                         : 'text-flick-muted/40'}`}
             data-testid="feeling-search-btn"
           >
             {isSearching ? (
-              <div className="w-5 h-5 border-2 border-flick-teal border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border border-flick-teal border-t-transparent rounded-full animate-spin" />
             ) : (
-              <Search className="w-5 h-5" strokeWidth={1.5} />
+              <Search className="w-4 h-4" strokeWidth={1.5} />
             )}
           </button>
         </motion.div>
@@ -127,14 +128,14 @@ const FeelingSearch = ({ onMovieClick }) => {
         <AnimatePresence>
           {isFocused && !query && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="absolute top-full left-0 right-0 mt-2 px-4"
+              exit={{ opacity: 0, y: 5 }}
+              className="absolute top-full left-0 right-0 mt-3 px-4"
             >
-              <div className="glass rounded-2xl p-4">
-                <p className="text-xs text-flick-muted uppercase tracking-wider mb-3">
-                  Try saying...
+              <div className="bg-flick-surface/90 backdrop-blur-md border-l border-white/10 p-4">
+                <p className="text-[10px] text-flick-muted/60 uppercase tracking-[0.2em] mb-3">
+                  Try saying
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {[
@@ -151,9 +152,9 @@ const FeelingSearch = ({ onMovieClick }) => {
                         setQuery(suggestion);
                         setIsFocused(false);
                       }}
-                      className="px-3 py-1.5 text-sm rounded-full
-                               bg-white/5 border border-white/10 text-flick-muted
-                               hover:bg-white/10 hover:text-flick-platinum
+                      className="px-3 py-1 text-xs text-flick-muted/80
+                               border-b border-transparent
+                               hover:text-flick-platinum hover:border-flick-teal/30
                                transition-all duration-200"
                     >
                       {suggestion}
@@ -173,25 +174,27 @@ const FeelingSearch = ({ onMovieClick }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-flick-bg/95 backdrop-blur-sm overflow-y-auto"
+            className="fixed inset-0 z-40 bg-flick-bg/98 backdrop-blur-sm overflow-y-auto"
           >
             <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
               {/* Header */}
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-4">
                 <div>
-                  <h2 className="font-serif text-2xl md:text-3xl tracking-tight">
+                  <h2 className="font-serif text-xl md:text-2xl tracking-tight">
                     Movies for "{query}"
                   </h2>
-                  <p className="text-flick-muted mt-1">
-                    {results.length} movies match your vibe
+                  <p className="text-flick-muted/60 text-sm mt-1">
+                    {results.length} matches
                   </p>
                 </div>
                 <button
                   onClick={() => setShowResults(false)}
-                  className="p-3 rounded-full glass hover:bg-white/10 transition-colors"
+                  className="p-2 text-flick-muted hover:text-flick-platinum 
+                           border-b border-transparent hover:border-flick-teal/30
+                           transition-all duration-200"
                   data-testid="close-feeling-results"
                 >
-                  <X className="w-5 h-5 text-flick-platinum" strokeWidth={1.5} />
+                  <X className="w-5 h-5" strokeWidth={1} />
                 </button>
               </div>
               
