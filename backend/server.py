@@ -61,17 +61,23 @@ class WatchHistoryItem(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
     tmdb_id: int
-    user_rating: int = Field(ge=1, le=10)
-    last_watched_date: datetime
+    user_rating: float = Field(ge=0, le=10)
+    watch_dates: List[str] = []
+    last_watched_date: str = ""
     watch_count: int = 1
     title: str = ""
     poster_path: Optional[str] = None
 
 class WatchHistoryCreate(BaseModel):
     tmdb_id: int
-    user_rating: int = Field(ge=1, le=10)
+    user_rating: float = Field(ge=0, le=10)
+    watched_date: Optional[str] = None
     title: str = ""
     poster_path: Optional[str] = None
+
+class WatchHistoryUpdate(BaseModel):
+    user_rating: Optional[float] = Field(default=None, ge=0, le=10)
+    watched_date: Optional[str] = None
 
 class MovieMetadata(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -121,6 +127,7 @@ class UserUpdate(BaseModel):
     bio: Optional[str] = None
     favorite_actors: Optional[List[str]] = None
     favorite_movies: Optional[List[Dict[str, Any]]] = None
+    streaming_services: Optional[List[str]] = None
 
 class LocationPermissionUpdate(BaseModel):
     location_permission: str  # "always", "ask", "never"
@@ -557,6 +564,9 @@ async def update_profile(data: UserUpdate, current_user: dict = Depends(get_curr
     if data.favorite_movies is not None:
         update_data["favorite_movies"] = data.favorite_movies[:5]
     
+    if data.streaming_services is not None:
+        update_data["streaming_services"] = data.streaming_services
+    
     if update_data:
         await db.auth_users.update_one(
             {"id": current_user["id"]},
@@ -812,77 +822,120 @@ async def get_user_profile():
     return user
 
 @api_router.get("/user/watch-history")
-async def get_watch_history():
-    """Get user's watch history"""
-    user = await db.users.find_one({"username": "flick_user"}, {"_id": 0})
-    if not user:
-        return []
+async def get_watch_history(current_user: dict = Depends(get_current_user)):
+    """Get authenticated user's watch history"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     
     history = await db.watch_history.find(
-        {"user_id": user["id"]},
+        {"user_id": current_user["id"]},
         {"_id": 0}
-    ).sort("last_watched_date", -1).to_list(100)
+    ).sort("last_watched_date", -1).to_list(500)
     
     return history
 
 @api_router.post("/user/watch-history")
-async def add_to_watch_history(item: WatchHistoryCreate):
-    """Add movie to watch history"""
-    user = await db.users.find_one({"username": "flick_user"}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+async def add_to_watch_history(item: WatchHistoryCreate, current_user: dict = Depends(get_current_user)):
+    """Add movie to authenticated user's watch history"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    watched_date = item.watched_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     
     # Check if already in history
     existing = await db.watch_history.find_one(
-        {"user_id": user["id"], "tmdb_id": item.tmdb_id},
+        {"user_id": current_user["id"], "tmdb_id": item.tmdb_id},
         {"_id": 0}
     )
     
     if existing:
-        # Update existing entry
+        # Append new watch date and update rating
+        watch_dates = existing.get("watch_dates", [])
+        if watched_date not in watch_dates:
+            watch_dates.append(watched_date)
+        watch_dates.sort(reverse=True)
+        
         await db.watch_history.update_one(
-            {"user_id": user["id"], "tmdb_id": item.tmdb_id},
+            {"user_id": current_user["id"], "tmdb_id": item.tmdb_id},
             {
                 "$set": {
                     "user_rating": item.user_rating,
-                    "last_watched_date": datetime.now(timezone.utc).isoformat(),
-                    "title": item.title,
-                    "poster_path": item.poster_path
-                },
-                "$inc": {"watch_count": 1}
+                    "last_watched_date": watch_dates[0],
+                    "watch_dates": watch_dates,
+                    "watch_count": len(watch_dates),
+                    "title": item.title or existing.get("title", ""),
+                    "poster_path": item.poster_path or existing.get("poster_path")
+                }
             }
         )
         updated = await db.watch_history.find_one(
-            {"user_id": user["id"], "tmdb_id": item.tmdb_id},
+            {"user_id": current_user["id"], "tmdb_id": item.tmdb_id},
             {"_id": 0}
         )
         return updated
     
     # Create new entry
-    watch_item = WatchHistoryItem(
-        user_id=user["id"],
-        tmdb_id=item.tmdb_id,
-        user_rating=item.user_rating,
-        last_watched_date=datetime.now(timezone.utc),
-        title=item.title,
-        poster_path=item.poster_path
-    )
-    
-    doc = watch_item.model_dump()
-    doc['last_watched_date'] = doc['last_watched_date'].isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "tmdb_id": item.tmdb_id,
+        "user_rating": item.user_rating,
+        "watch_dates": [watched_date],
+        "last_watched_date": watched_date,
+        "watch_count": 1,
+        "title": item.title,
+        "poster_path": item.poster_path
+    }
     await db.watch_history.insert_one(doc)
-    
+    doc.pop("_id", None)
     return doc
 
+@api_router.put("/user/watch-history/{tmdb_id}")
+async def update_watch_history(tmdb_id: int, data: WatchHistoryUpdate, current_user: dict = Depends(get_current_user)):
+    """Update rating or add a watch date for a movie in history"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    existing = await db.watch_history.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Movie not in watch history")
+    
+    update = {}
+    if data.user_rating is not None:
+        update["user_rating"] = data.user_rating
+    
+    if data.watched_date:
+        watch_dates = existing.get("watch_dates", [])
+        if data.watched_date not in watch_dates:
+            watch_dates.append(data.watched_date)
+            watch_dates.sort(reverse=True)
+            update["watch_dates"] = watch_dates
+            update["last_watched_date"] = watch_dates[0]
+            update["watch_count"] = len(watch_dates)
+    
+    if update:
+        await db.watch_history.update_one(
+            {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+            {"$set": update}
+        )
+    
+    updated = await db.watch_history.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    return updated
+
 @api_router.delete("/user/watch-history/{tmdb_id}")
-async def remove_from_watch_history(tmdb_id: int):
-    """Remove movie from watch history"""
-    user = await db.users.find_one({"username": "flick_user"}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+async def remove_from_watch_history(tmdb_id: int, current_user: dict = Depends(get_current_user)):
+    """Remove movie from authenticated user's watch history"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     
     result = await db.watch_history.delete_one(
-        {"user_id": user["id"], "tmdb_id": tmdb_id}
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id}
     )
     
     if result.deleted_count == 0:

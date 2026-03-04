@@ -282,9 +282,14 @@ function AppContent() {
         const trendingRes = await axios.get(`${API}/movies/trending`);
         setTrendingMovies(trendingRes.data.results || []);
         
-        // Fetch watch history
-        const historyRes = await axios.get(`${API}/user/watch-history`);
-        setWatchHistory(historyRes.data || []);
+        // Fetch watch history (requires auth)
+        const token = localStorage.getItem("chef_token");
+        if (token) {
+          const historyRes = await axios.get(`${API}/user/watch-history`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setWatchHistory(historyRes.data || []);
+        }
         
         // Initial section load (curated)
         await fetchSectionMovies("curated");
@@ -391,15 +396,17 @@ function AppContent() {
   // Handle add to watch history
   const handleAddToHistory = async (movie, rating) => {
     try {
+      const token = localStorage.getItem("chef_token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       await axios.post(`${API}/user/watch-history`, {
         tmdb_id: movie.id,
         user_rating: rating,
         title: movie.title,
         poster_path: movie.poster_path,
-      });
+      }, { headers });
       
       // Refresh watch history
-      const historyRes = await axios.get(`${API}/user/watch-history`);
+      const historyRes = await axios.get(`${API}/user/watch-history`, { headers });
       setWatchHistory(historyRes.data || []);
       
       toast.success("Added to your watch history");
@@ -421,7 +428,7 @@ function AppContent() {
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           {/* Logo */}
           <a href="/" className="flex-shrink-0" data-testid="chef-logo">
-            <img src="/logo.png" alt="Chef" className="h-14 w-14 object-contain -rotate-12" />
+            <img src="/logo.png" alt="Chef" className="h-[72px] w-[72px] object-contain -rotate-12" />
           </a>
           
           {/* Feeling Search - centered */}
