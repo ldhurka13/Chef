@@ -33,6 +33,7 @@ function AppContent() {
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [showFlash, setShowFlash] = useState(false);
   const [randomPicksOpen, setRandomPicksOpen] = useState(false);
+  const [randomLoading, setRandomLoading] = useState(false);
   
   // Vibe parameters
   const [vibeParams, setVibeParams] = useState({
@@ -99,17 +100,26 @@ function AppContent() {
   }, [discoverMovies]);
 
   // Handle random movie picks
-  const handleRandomPicks = async () => {
-    setShowFlash(true);
-    setTimeout(() => setShowFlash(false), 200);
+  const handleRandomPicks = async (isRefresh = false) => {
+    if (!isRefresh) {
+      setRandomPicksOpen(true);
+    }
+    setRandomLoading(true);
+    setRandomMovies([]);
     
     try {
       const res = await axios.get(`${API}/movies/random-picks`);
+      // Small delay to ensure smooth transition
+      await new Promise(resolve => setTimeout(resolve, 300));
       setRandomMovies(res.data.results || []);
-      setRandomPicksOpen(true);
     } catch (error) {
       console.error("Failed to get random picks:", error);
       toast.error("Failed to get movie recommendations");
+      if (!isRefresh) {
+        setRandomPicksOpen(false);
+      }
+    } finally {
+      setRandomLoading(false);
     }
   };
 
@@ -222,7 +232,7 @@ function AppContent() {
       {/* Floating Navigation */}
       <FloatingNav 
         onVibeClick={() => setVibeConsoleOpen(true)}
-        onRandomClick={handleRandomPicks}
+        onRandomClick={() => handleRandomPicks(false)}
       />
       
       {/* Vibe Console Modal */}
@@ -242,15 +252,16 @@ function AppContent() {
       />
       
       {/* Random Picks Modal */}
-      {randomPicksOpen && randomMovies.length > 0 && (
+      {randomPicksOpen && (
         <div 
           className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4"
           onClick={() => setRandomPicksOpen(false)}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
             className="max-w-4xl w-full"
             onClick={(e) => e.stopPropagation()}
           >
@@ -260,53 +271,95 @@ function AppContent() {
             <p className="text-center text-flick-muted/60 text-sm mb-8">
               Based on your taste
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {randomMovies.map((movie, index) => (
-                <motion.div
-                  key={movie.id || index}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-flick-surface/50 backdrop-blur-sm border border-white/5 overflow-hidden cursor-pointer group"
-                  onClick={() => {
-                    setRandomPicksOpen(false);
-                    handleMovieClick(movie);
-                  }}
-                  data-testid={`random-movie-${index}`}
+            
+            {/* Loading State */}
+            {randomLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[0, 1, 2].map((index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-flick-surface/30 border border-white/5 overflow-hidden"
+                  >
+                    <div className="aspect-[2/3] skeleton" />
+                    <div className="p-4 space-y-2">
+                      <div className="h-5 w-3/4 skeleton rounded" />
+                      <div className="h-4 w-1/2 skeleton rounded" />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {randomMovies.map((movie, index) => (
+                  <motion.div
+                    key={movie.id || index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.15, duration: 0.4 }}
+                    className="bg-flick-surface/50 backdrop-blur-sm border border-white/5 overflow-hidden cursor-pointer group"
+                    onClick={() => {
+                      setRandomPicksOpen(false);
+                      handleMovieClick(movie);
+                    }}
+                    data-testid={`random-movie-${index}`}
+                  >
+                    <div className="aspect-[2/3] relative overflow-hidden">
+                      {movie.poster_url ? (
+                        <img
+                          src={movie.poster_url}
+                          alt={movie.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-flick-surface flex items-center justify-center">
+                          <span className="text-flick-muted">No Image</span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                      {movie.match_percentage && (
+                        <div className="absolute top-3 right-3 px-2 py-1 bg-flick-teal/20 border border-flick-teal/30 text-flick-teal text-xs">
+                          {movie.match_percentage}%
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-serif text-lg truncate">{movie.title}</h3>
+                      <p className="text-sm text-flick-teal mt-1">{movie.vibe_tag}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+            
+            {/* Action Buttons */}
+            <div className="mt-8 flex items-center justify-center gap-6">
+              <button
+                onClick={() => handleRandomPicks(true)}
+                disabled={randomLoading}
+                className="flex items-center gap-2 text-flick-teal hover:text-flick-platinum transition-colors text-sm disabled:opacity-50"
+                data-testid="refresh-random-btn"
+              >
+                <svg 
+                  className={`w-4 h-4 ${randomLoading ? 'animate-spin' : ''}`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
                 >
-                  <div className="aspect-[2/3] relative overflow-hidden">
-                    {movie.poster_url ? (
-                      <img
-                        src={movie.poster_url}
-                        alt={movie.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-flick-surface flex items-center justify-center">
-                        <span className="text-flick-muted">No Image</span>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                    {movie.match_percentage && (
-                      <div className="absolute top-3 right-3 px-2 py-1 bg-flick-teal/20 border border-flick-teal/30 text-flick-teal text-xs">
-                        {movie.match_percentage}%
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-serif text-lg truncate">{movie.title}</h3>
-                    <p className="text-sm text-flick-teal mt-1">{movie.vibe_tag}</p>
-                  </div>
-                </motion.div>
-              ))}
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+              <button
+                onClick={() => setRandomPicksOpen(false)}
+                className="text-flick-muted hover:text-flick-platinum transition-colors text-sm"
+                data-testid="close-random-btn"
+              >
+                Close
+              </button>
             </div>
-            <button
-              onClick={() => setRandomPicksOpen(false)}
-              className="mt-8 mx-auto block text-flick-muted hover:text-flick-platinum transition-colors text-sm"
-              data-testid="close-random-btn"
-            >
-              Close
-            </button>
           </motion.div>
         </div>
       )}
