@@ -515,6 +515,128 @@ async def get_trending_movies():
     
     return {"results": movies}
 
+# ============ SECTION ENDPOINTS ============
+
+@api_router.get("/movies/sections/chefs-special")
+async def get_chefs_special():
+    """
+    Chef's Special: Recent movies that critics like the most
+    - High vote average
+    - Recent releases (last 2 years)
+    - Good vote count (critical mass)
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    # Get critically acclaimed recent movies
+    current_year = datetime.now().year
+    data = tmdb_request("/discover/movie", {
+        "sort_by": "vote_average.desc",
+        "vote_count.gte": 500,
+        "vote_average.gte": 7.5,
+        "primary_release_date.gte": f"{current_year - 2}-01-01",
+        "page": 1
+    })
+    
+    if not data:
+        raise HTTPException(status_code=500, detail="Failed to fetch chef's special")
+    
+    movies = []
+    for movie in data.get("results", [])[:12]:
+        genre_ids = movie.get("genre_ids", [])
+        genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+        movies.append({
+            **movie,
+            "genres": genres,
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+            "vibe_tag": "Critics' favorite",
+            "match_percentage": min(int(movie.get("vote_average", 0) * 10), 100)
+        })
+    
+    return {"results": movies}
+
+@api_router.get("/movies/sections/certified-swangy")
+async def get_certified_swangy():
+    """
+    Certified Swangy: Most trending movies in the last two weeks
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    # Get trending movies (daily for more recent)
+    data = tmdb_request("/trending/movie/day")
+    
+    if not data:
+        # Fallback to weekly
+        data = tmdb_request("/trending/movie/week")
+    
+    if not data:
+        raise HTTPException(status_code=500, detail="Failed to fetch trending")
+    
+    movies = []
+    for movie in data.get("results", [])[:12]:
+        genre_ids = movie.get("genre_ids", [])
+        genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+        
+        # Calculate "swangy" score based on popularity
+        popularity = movie.get("popularity", 0)
+        swangy_score = min(int(70 + (popularity / 100) * 30), 100)
+        
+        movies.append({
+            **movie,
+            "genres": genres,
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+            "vibe_tag": "Trending now",
+            "match_percentage": swangy_score
+        })
+    
+    return {"results": movies}
+
+@api_router.get("/movies/sections/all-time-classics")
+async def get_all_time_classics():
+    """
+    All Time Classics: Highly rated, highly watched classic movies
+    - High vote average
+    - Very high vote count (stood test of time)
+    - Released before 2010
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    # Get classic highly-rated movies
+    data = tmdb_request("/discover/movie", {
+        "sort_by": "vote_average.desc",
+        "vote_count.gte": 5000,
+        "vote_average.gte": 8.0,
+        "primary_release_date.lte": "2010-12-31",
+        "page": 1
+    })
+    
+    if not data:
+        raise HTTPException(status_code=500, detail="Failed to fetch classics")
+    
+    movies = []
+    for movie in data.get("results", [])[:12]:
+        genre_ids = movie.get("genre_ids", [])
+        genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+        
+        # Classics get high match percentage
+        movies.append({
+            **movie,
+            "genres": genres,
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+            "vibe_tag": "Timeless classic",
+            "match_percentage": min(int(movie.get("vote_average", 0) * 10) + 5, 100)
+        })
+    
+    return {"results": movies}
+
 @api_router.get("/movies/emergency")
 async def get_emergency_recommendations():
     """

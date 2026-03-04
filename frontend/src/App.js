@@ -15,6 +15,7 @@ import SafetyNet from "./components/SafetyNet";
 import FilmGrain from "./components/FilmGrain";
 import ShutterFlash from "./components/ShutterFlash";
 import FeelingSearch from "./components/FeelingSearch";
+import SectionNav from "./components/SectionNav";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -53,6 +54,47 @@ function AppContent() {
   const [watchHistory, setWatchHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [discoverLoading, setDiscoverLoading] = useState(false);
+  
+  // Section state
+  const [activeSection, setActiveSection] = useState("curated");
+  const [sectionMovies, setSectionMovies] = useState([]);
+  const [sectionLoading, setSectionLoading] = useState(false);
+
+  // Fetch movies for a section
+  const fetchSectionMovies = useCallback(async (section) => {
+    setSectionLoading(true);
+    try {
+      let res;
+      switch (section) {
+        case "curated":
+          res = await axios.post(`${API}/movies/discover`, vibeParams);
+          break;
+        case "chefs-special":
+          res = await axios.get(`${API}/movies/sections/chefs-special`);
+          break;
+        case "certified-swangy":
+          res = await axios.get(`${API}/movies/sections/certified-swangy`);
+          break;
+        case "all-time-classics":
+          res = await axios.get(`${API}/movies/sections/all-time-classics`);
+          break;
+        default:
+          res = await axios.post(`${API}/movies/discover`, vibeParams);
+      }
+      setSectionMovies(res.data.results || []);
+    } catch (error) {
+      console.error("Failed to fetch section:", error);
+      toast.error("Failed to load movies");
+    } finally {
+      setSectionLoading(false);
+    }
+  }, [vibeParams]);
+
+  // Handle section change
+  const handleSectionChange = useCallback((section) => {
+    setActiveSection(section);
+    fetchSectionMovies(section);
+  }, [fetchSectionMovies]);
 
   // Initialize data
   useEffect(() => {
@@ -69,8 +111,8 @@ function AppContent() {
         const historyRes = await axios.get(`${API}/user/watch-history`);
         setWatchHistory(historyRes.data || []);
         
-        // Initial discover
-        await discoverMovies(vibeParams);
+        // Initial section load (curated)
+        await fetchSectionMovies("curated");
       } catch (error) {
         console.error("Failed to initialize:", error);
         toast.error("Failed to load movies");
@@ -97,10 +139,21 @@ function AppContent() {
   }, []);
 
   // Handle vibe change
-  const handleVibeChange = useCallback((newParams) => {
+  const handleVibeChange = useCallback(async (newParams) => {
     setVibeParams(newParams);
-    discoverMovies(newParams);
-  }, [discoverMovies]);
+    // If on curated section, refresh it
+    if (activeSection === "curated") {
+      setSectionLoading(true);
+      try {
+        const res = await axios.post(`${API}/movies/discover`, newParams);
+        setSectionMovies(res.data.results || []);
+      } catch (error) {
+        console.error("Failed to update curated:", error);
+      } finally {
+        setSectionLoading(false);
+      }
+    }
+  }, [activeSection]);
 
   // Handle random movie picks
   const handleRandomPicks = async (isRefresh = false) => {
@@ -211,27 +264,16 @@ function AppContent() {
                     onMovieClick={handleMovieClick}
                   />
                   
-                  {/* Movie Discovery Grid */}
+                  {/* Section Navigation & Movies */}
                   <section className="px-4 md:px-8 max-w-7xl mx-auto mt-4">
-                    <h2 className="font-serif text-2xl md:text-3xl tracking-tight mb-6">
-                      Curated for You
-                    </h2>
+                    <SectionNav 
+                      activeSection={activeSection}
+                      onSectionChange={handleSectionChange}
+                    />
                     
                     <MovieGrid 
-                      movies={discoveredMovies}
-                      loading={discoverLoading || loading}
-                      onMovieClick={handleMovieClick}
-                    />
-                  </section>
-                  
-                  {/* Trending Section */}
-                  <section className="px-4 md:px-8 max-w-7xl mx-auto mt-20">
-                    <h2 className="font-serif text-2xl md:text-3xl tracking-tight mb-8">
-                      Trending This Week
-                    </h2>
-                    <MovieGrid 
-                      movies={trendingMovies.slice(1)}
-                      loading={loading}
+                      movies={sectionMovies}
+                      loading={sectionLoading || loading}
                       onMovieClick={handleMovieClick}
                     />
                   </section>
