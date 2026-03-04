@@ -637,6 +637,172 @@ async def get_all_time_classics():
     
     return {"results": movies}
 
+@api_router.get("/movies/sections/explore")
+async def get_explore_movies():
+    """
+    Explore: Movies NOT similar to user's usual tastes
+    - Different genres from what user typically watches
+    - Highly rated and popular
+    - Not in user's watch history
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    user = await db.users.find_one({"username": "flick_user"}, {"_id": 0})
+    
+    # Get user's watched genres and movie IDs
+    user_genres = set()
+    watched_ids = set()
+    
+    if user:
+        watch_history = await db.watch_history.find(
+            {"user_id": user["id"]},
+            {"_id": 0}
+        ).to_list(100)
+        
+        for movie in watch_history:
+            watched_ids.add(movie.get("tmdb_id"))
+            # Fetch genre info
+            details = tmdb_request(f"/movie/{movie['tmdb_id']}")
+            if details:
+                for genre in details.get("genres", []):
+                    user_genres.add(genre.get("id"))
+    
+    # All available genres
+    all_genre_ids = set(GENRE_MAP.keys())
+    
+    # Find genres user hasn't explored much
+    unexplored_genres = all_genre_ids - user_genres
+    
+    # Build discover params
+    discover_params = {
+        "sort_by": "popularity.desc",
+        "vote_count.gte": 500,
+        "vote_average.gte": 7.0,
+        "page": 1
+    }
+    
+    # If there are unexplored genres, prioritize them
+    if unexplored_genres:
+        explore_genre_list = list(unexplored_genres)[:3]
+        discover_params["with_genres"] = "|".join(str(g) for g in explore_genre_list)  # OR condition
+    
+    # Fetch movies
+    data = tmdb_request("/discover/movie", discover_params)
+    
+    if not data or not data.get("results"):
+        # Fallback to popular movies
+        data = tmdb_request("/movie/popular")
+    
+    if not data:
+        raise HTTPException(status_code=500, detail="Failed to fetch explore movies")
+    
+    movies = []
+    for movie in data.get("results", []):
+        # Skip watched movies
+        if movie.get("id") in watched_ids:
+            continue
+        if len(movies) >= 12:
+            break
+            
+        genre_ids = movie.get("genre_ids", [])
+        genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+        
+        movies.append({
+            **movie,
+            "genres": genres,
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+            "vibe_tag": "Expand your horizons",
+            "match_percentage": min(int(movie.get("vote_average", 0) * 10), 100)
+        })
+    
+    return {"results": movies}
+    
+    return {"results": movies}
+
+# Popular movie collections/franchises for Marathon section
+POPULAR_COLLECTIONS = [
+    {"id": 10, "name": "Star Wars Collection"},
+    {"id": 119, "name": "The Lord of the Rings Collection"},
+    {"id": 1241, "name": "Harry Potter Collection"},
+    {"id": 131296, "name": "Spider-Man (MCU) Collection"},
+    {"id": 86311, "name": "The Avengers Collection"},
+    {"id": 528, "name": "The Godfather Collection"},
+    {"id": 2326, "name": "The Matrix Collection"},
+    {"id": 9485, "name": "The Fast and the Furious Collection"},
+    {"id": 656, "name": "Saw Collection"},
+    {"id": 748, "name": "X-Men Collection"},
+    {"id": 87096, "name": "Avatar Collection"},
+    {"id": 295, "name": "Pirates of the Caribbean Collection"},
+    {"id": 263, "name": "The Dark Knight Collection"},
+    {"id": 121938, "name": "The Hobbit Collection"},
+    {"id": 84, "name": "Indiana Jones Collection"},
+    {"id": 8091, "name": "Alien Collection"},
+    {"id": 1570, "name": "Die Hard Collection"},
+    {"id": 328, "name": "Jurassic Park Collection"},
+    {"id": 2806, "name": "American Pie Collection"},
+    {"id": 230, "name": "The Terminator Collection"},
+]
+
+@api_router.get("/movies/sections/marathon")
+async def get_marathon_collections():
+    """
+    Marathon: Movie collections/franchises
+    Each card represents an entire movie universe (trilogy, saga, etc.)
+    """
+    collections = []
+    
+    for coll in POPULAR_COLLECTIONS[:12]:
+        coll_data = tmdb_request(f"/collection/{coll['id']}")
+        
+        if coll_data:
+            parts = coll_data.get("parts", [])
+            movie_count = len(parts)
+            
+            # Calculate total runtime and average rating
+            total_runtime = 0
+            total_rating = 0
+            rating_count = 0
+            
+            for part in parts:
+                if part.get("vote_average"):
+                    total_rating += part.get("vote_average", 0)
+                    rating_count += 1
+            
+            avg_rating = total_rating / rating_count if rating_count > 0 else 0
+            
+            # Get years span
+            years = [p.get("release_date", "")[:4] for p in parts if p.get("release_date")]
+            years = [y for y in years if y]
+            year_span = f"{min(years)} - {max(years)}" if len(years) >= 2 else (years[0] if years else "")
+            
+            collections.append({
+                "id": coll_data.get("id"),
+                "name": coll_data.get("name"),
+                "overview": coll_data.get("overview", ""),
+                "poster_url": get_image_url(coll_data.get("poster_path"), "w500"),
+                "backdrop_url": get_image_url(coll_data.get("backdrop_path"), "w1280"),
+                "movie_count": movie_count,
+                "year_span": year_span,
+                "avg_rating": round(avg_rating, 1),
+                "vibe_tag": f"{movie_count} films to binge",
+                "match_percentage": min(int(avg_rating * 10) + 5, 100),
+                "parts": [
+                    {
+                        "id": p.get("id"),
+                        "title": p.get("title"),
+                        "release_date": p.get("release_date"),
+                        "poster_url": get_image_url(p.get("poster_path"), "w342")
+                    }
+                    for p in sorted(parts, key=lambda x: x.get("release_date", "") or "9999")
+                ],
+                "is_collection": True
+            })
+    
+    return {"results": collections}
+
 @api_router.get("/movies/emergency")
 async def get_emergency_recommendations():
     """

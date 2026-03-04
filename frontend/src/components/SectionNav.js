@@ -6,17 +6,19 @@ const sections = [
   { id: "chefs-special", label: "Chef's Special" },
   { id: "certified-swangy", label: "Certified Swangy" },
   { id: "all-time-classics", label: "All Time Classics" },
+  { id: "explore", label: "Explore" },
+  { id: "marathon", label: "Marathon" },
 ];
 
 const SectionNav = ({ activeSection, onSectionChange }) => {
   return (
     <nav className="w-full mb-8" data-testid="section-nav">
-      <div className="flex items-center gap-8 md:gap-12 overflow-x-auto pb-2 scrollbar-hide">
+      <div className="flex items-center gap-6 md:gap-10 overflow-x-auto pb-2 scrollbar-hide">
         {sections.map((section) => (
           <motion.button
             key={section.id}
             onClick={() => onSectionChange(section.id)}
-            className={`relative whitespace-nowrap text-base md:text-lg font-medium tracking-wide
+            className={`relative whitespace-nowrap text-sm md:text-base font-medium tracking-wide
                        transition-colors duration-300 py-2
                        ${activeSection === section.id 
                          ? 'text-flick-platinum' 

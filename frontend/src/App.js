@@ -16,6 +16,7 @@ import FilmGrain from "./components/FilmGrain";
 import ShutterFlash from "./components/ShutterFlash";
 import FeelingSearch from "./components/FeelingSearch";
 import SectionNav from "./components/SectionNav";
+import CollectionCard from "./components/CollectionCard";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -77,6 +78,12 @@ function AppContent() {
           break;
         case "all-time-classics":
           res = await axios.get(`${API}/movies/sections/all-time-classics`);
+          break;
+        case "explore":
+          res = await axios.get(`${API}/movies/sections/explore`);
+          break;
+        case "marathon":
+          res = await axios.get(`${API}/movies/sections/marathon`);
           break;
         default:
           res = await axios.post(`${API}/movies/discover`, vibeParams);
@@ -271,11 +278,43 @@ function AppContent() {
                       onSectionChange={handleSectionChange}
                     />
                     
-                    <MovieGrid 
-                      movies={sectionMovies}
-                      loading={sectionLoading || loading}
-                      onMovieClick={handleMovieClick}
-                    />
+                    {activeSection === "marathon" ? (
+                      /* Marathon Collection Grid */
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {sectionLoading || loading ? (
+                          [...Array(6)].map((_, index) => (
+                            <div key={index} className="h-[420px] rounded-lg skeleton" />
+                          ))
+                        ) : (
+                          sectionMovies.map((collection, index) => (
+                            <motion.div
+                              key={collection.id}
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: index * 0.05, duration: 0.4 }}
+                            >
+                              <CollectionCard
+                                collection={collection}
+                                onClick={() => {
+                                  // For collections, we could open a special modal
+                                  // For now, open first movie in the collection
+                                  if (collection.parts && collection.parts.length > 0) {
+                                    handleMovieClick({ id: collection.parts[0].id });
+                                  }
+                                }}
+                                index={index}
+                              />
+                            </motion.div>
+                          ))
+                        )}
+                      </div>
+                    ) : (
+                      <MovieGrid 
+                        movies={sectionMovies}
+                        loading={sectionLoading || loading}
+                        onMovieClick={handleMovieClick}
+                      />
+                    )}
                   </section>
                 </main>
               }
