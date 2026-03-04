@@ -212,8 +212,8 @@ function AppContent() {
                   />
                   
                   {/* Movie Discovery Grid */}
-                  <section className="px-4 md:px-8 max-w-7xl mx-auto mt-12">
-                    <h2 className="font-serif text-2xl md:text-3xl tracking-tight mb-8">
+                  <section className="px-4 md:px-8 max-w-7xl mx-auto mt-4">
+                    <h2 className="font-serif text-2xl md:text-3xl tracking-tight mb-6">
                       Curated for You
                     </h2>
                     
