@@ -32,8 +32,8 @@ const CollectionCard = ({ collection, onClick, index }) => {
             onLoad={() => setImageLoaded(true)}
           />
         ) : (
-          <div className="w-full h-full bg-flick-surface flex items-center justify-center">
-            <Film className="w-12 h-12 text-flick-muted" />
+          <div className="w-full h-full bg-chef-surface flex items-center justify-center">
+            <Film className="w-12 h-12 text-chef-muted" />
           </div>
         )}
       </div>
@@ -42,16 +42,16 @@ const CollectionCard = ({ collection, onClick, index }) => {
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
 
       {/* Movie Count Badge */}
-      <div className="absolute top-3 left-3 px-3 py-1.5 bg-flick-orange/20 border border-flick-orange/40 
-                    text-flick-orange text-xs font-medium flex items-center gap-1.5">
+      <div className="absolute top-3 left-3 px-3 py-1.5 bg-chef-orange/20 border border-chef-orange/40 
+                    text-chef-orange text-xs font-medium flex items-center gap-1.5">
         <Film className="w-3 h-3" />
         {collection.movie_count} Films
       </div>
 
       {/* Rating Badge */}
       {collection.avg_rating > 0 && (
-        <div className="absolute top-3 right-3 px-2 py-1 bg-flick-teal/20 border border-flick-teal/30 
-                      text-flick-teal text-xs flex items-center gap-1">
+        <div className="absolute top-3 right-3 px-2 py-1 bg-chef-teal/20 border border-chef-teal/30 
+                      text-chef-teal text-xs flex items-center gap-1">
           <Star className="w-3 h-3" fill="currentColor" />
           {collection.avg_rating}
         </div>
@@ -66,14 +66,14 @@ const CollectionCard = ({ collection, onClick, index }) => {
 
         {/* Year Span */}
         {collection.year_span && (
-          <div className="flex items-center gap-1.5 text-flick-muted text-sm mb-3">
+          <div className="flex items-center gap-1.5 text-chef-muted text-sm mb-3">
             <Calendar className="w-3.5 h-3.5" />
             {collection.year_span}
           </div>
         )}
 
         {/* Vibe Tag */}
-        <p className="text-flick-orange text-sm font-medium mb-3">
+        <p className="text-chef-orange text-sm font-medium mb-3">
           {collection.vibe_tag}
         </p>
 
@@ -99,13 +99,13 @@ const CollectionCard = ({ collection, onClick, index }) => {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full bg-flick-surface" />
+                <div className="w-full h-full bg-chef-surface" />
               )}
             </div>
           ))}
           {collection.parts?.length > 5 && (
-            <div className="w-10 h-14 rounded bg-flick-surface/50 border border-white/10 
-                          flex items-center justify-center text-xs text-flick-muted">
+            <div className="w-10 h-14 rounded bg-chef-surface/50 border border-white/10 
+                          flex items-center justify-center text-xs text-chef-muted">
               +{collection.parts.length - 5}
             </div>
           )}
@@ -116,7 +116,7 @@ const CollectionCard = ({ collection, onClick, index }) => {
       <div 
         className={`absolute inset-0 rounded-lg border transition-all duration-300
                     ${isHovered 
-                      ? 'border-flick-orange/40 shadow-glow-orange' 
+                      ? 'border-chef-orange/40 shadow-glow-orange' 
                       : 'border-white/5'}`}
       />
     </motion.div>

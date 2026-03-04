@@ -42,15 +42,15 @@ const ProfileModal = ({ isOpen, onClose, user, watchHistory, onUpdateProfile }) 
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.3 }}
-            className="relative w-full max-w-lg bg-flick-surface border border-white/10 
+            className="relative w-full max-w-lg bg-chef-surface border border-white/10 
                      rounded-lg shadow-cinematic overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 text-flick-muted 
-                       hover:text-flick-platinum transition-colors"
+              className="absolute top-4 right-4 p-2 text-chef-muted 
+                       hover:text-chef-platinum transition-colors"
             >
               <X className="w-5 h-5" strokeWidth={1.5} />
             </button>
@@ -58,15 +58,15 @@ const ProfileModal = ({ isOpen, onClose, user, watchHistory, onUpdateProfile }) 
             {/* Header */}
             <div className="px-8 pt-8 pb-6">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-flick-teal/20 border border-flick-teal/30
+                <div className="w-16 h-16 rounded-full bg-chef-teal/20 border border-chef-teal/30
                               flex items-center justify-center">
-                  <User className="w-8 h-8 text-flick-teal" />
+                  <User className="w-8 h-8 text-chef-teal" />
                 </div>
                 <div>
-                  <h2 className="font-serif text-2xl text-flick-platinum">
+                  <h2 className="font-serif text-2xl text-chef-platinum">
                     {user?.username || "User"}
                   </h2>
-                  <p className="text-sm text-flick-muted">{user?.email}</p>
+                  <p className="text-sm text-chef-muted">{user?.email}</p>
                 </div>
               </div>
             </div>
@@ -74,20 +74,20 @@ const ProfileModal = ({ isOpen, onClose, user, watchHistory, onUpdateProfile }) 
             {/* Stats */}
             <div className="px-8 pb-6">
               <div className="grid grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-flick-bg/50 rounded-lg border border-white/5">
-                  <Film className="w-5 h-5 text-flick-teal mx-auto mb-2" />
-                  <p className="text-2xl font-serif text-flick-platinum">{totalWatched}</p>
-                  <p className="text-xs text-flick-muted">Movies Watched</p>
+                <div className="text-center p-4 bg-chef-bg/50 rounded-lg border border-white/5">
+                  <Film className="w-5 h-5 text-chef-teal mx-auto mb-2" />
+                  <p className="text-2xl font-serif text-chef-platinum">{totalWatched}</p>
+                  <p className="text-xs text-chef-muted">Movies Watched</p>
                 </div>
-                <div className="text-center p-4 bg-flick-bg/50 rounded-lg border border-white/5">
-                  <Star className="w-5 h-5 text-flick-gold mx-auto mb-2" />
-                  <p className="text-2xl font-serif text-flick-platinum">{avgRating}</p>
-                  <p className="text-xs text-flick-muted">Avg Rating</p>
+                <div className="text-center p-4 bg-chef-bg/50 rounded-lg border border-white/5">
+                  <Star className="w-5 h-5 text-chef-gold mx-auto mb-2" />
+                  <p className="text-2xl font-serif text-chef-platinum">{avgRating}</p>
+                  <p className="text-xs text-chef-muted">Avg Rating</p>
                 </div>
-                <div className="text-center p-4 bg-flick-bg/50 rounded-lg border border-white/5">
-                  <Calendar className="w-5 h-5 text-flick-orange mx-auto mb-2" />
-                  <p className="text-2xl font-serif text-flick-platinum">{user?.birth_year || "-"}</p>
-                  <p className="text-xs text-flick-muted">Birth Year</p>
+                <div className="text-center p-4 bg-chef-bg/50 rounded-lg border border-white/5">
+                  <Calendar className="w-5 h-5 text-chef-orange mx-auto mb-2" />
+                  <p className="text-2xl font-serif text-chef-platinum">{user?.birth_year || "-"}</p>
+                  <p className="text-xs text-chef-muted">Birth Year</p>
                 </div>
               </div>
             </div>
@@ -97,20 +97,20 @@ const ProfileModal = ({ isOpen, onClose, user, watchHistory, onUpdateProfile }) 
               {isEditing ? (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs text-flick-muted uppercase tracking-wider mb-2">
+                    <label className="block text-xs text-chef-muted uppercase tracking-wider mb-2">
                       Username
                     </label>
                     <input
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="w-full px-4 py-3 bg-flick-bg border border-white/10 
-                               text-flick-platinum
-                               focus:border-flick-teal/50 focus:outline-none transition-colors"
+                      className="w-full px-4 py-3 bg-chef-bg border border-white/10 
+                               text-chef-platinum
+                               focus:border-chef-teal/50 focus:outline-none transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-flick-muted uppercase tracking-wider mb-2">
+                    <label className="block text-xs text-chef-muted uppercase tracking-wider mb-2">
                       Birth Year
                     </label>
                     <input
@@ -119,23 +119,23 @@ const ProfileModal = ({ isOpen, onClose, user, watchHistory, onUpdateProfile }) 
                       onChange={(e) => setBirthYear(parseInt(e.target.value))}
                       min="1940"
                       max="2010"
-                      className="w-full px-4 py-3 bg-flick-bg border border-white/10 
-                               text-flick-platinum
-                               focus:border-flick-teal/50 focus:outline-none transition-colors"
+                      className="w-full px-4 py-3 bg-chef-bg border border-white/10 
+                               text-chef-platinum
+                               focus:border-chef-teal/50 focus:outline-none transition-colors"
                     />
                   </div>
                   <div className="flex gap-3">
                     <button
                       onClick={() => setIsEditing(false)}
-                      className="flex-1 py-2 border border-white/10 text-flick-muted
-                               hover:text-flick-platinum transition-colors"
+                      className="flex-1 py-2 border border-white/10 text-chef-muted
+                               hover:text-chef-platinum transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleSave}
-                      className="flex-1 py-2 bg-flick-teal/20 border border-flick-teal/30
-                               text-flick-teal hover:bg-flick-teal/30 transition-colors"
+                      className="flex-1 py-2 bg-chef-teal/20 border border-chef-teal/30
+                               text-chef-teal hover:bg-chef-teal/30 transition-colors"
                     >
                       Save Changes
                     </button>
@@ -144,8 +144,8 @@ const ProfileModal = ({ isOpen, onClose, user, watchHistory, onUpdateProfile }) 
               ) : (
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="w-full py-3 border border-white/10 text-flick-muted
-                           hover:text-flick-platinum hover:border-white/20 transition-colors"
+                  className="w-full py-3 border border-white/10 text-chef-muted
+                           hover:text-chef-platinum hover:border-white/20 transition-colors"
                 >
                   Edit Profile
                 </button>

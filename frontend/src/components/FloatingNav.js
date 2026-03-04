@@ -14,14 +14,14 @@ const NavItem = ({ icon: Icon, label, isActive, onClick }) => {
       <Icon 
         className={`w-5 h-5 transition-all duration-300 stroke-1
                    ${isActive 
-                     ? 'text-flick-platinum' 
-                     : 'text-flick-muted group-hover:text-flick-platinum'}`}
+                     ? 'text-chef-platinum' 
+                     : 'text-chef-muted group-hover:text-chef-platinum'}`}
       />
       <span 
         className={`text-[10px] tracking-wider uppercase transition-all duration-300
                    ${isActive 
-                     ? 'text-flick-platinum' 
-                     : 'text-flick-muted/0 group-hover:text-flick-muted'}`}
+                     ? 'text-chef-platinum' 
+                     : 'text-chef-muted/0 group-hover:text-chef-muted'}`}
       >
         {label}
       </span>
@@ -30,7 +30,7 @@ const NavItem = ({ icon: Icon, label, isActive, onClick }) => {
       {isActive && (
         <motion.div
           layoutId="navIndicator"
-          className="absolute -bottom-2 w-1 h-1 bg-flick-teal rounded-full"
+          className="absolute -bottom-2 w-1 h-1 bg-chef-teal rounded-full"
         />
       )}
     </motion.button>
@@ -45,7 +45,7 @@ const FloatingNav = ({ onVibeClick, onRandomClick, onComfortClick }) => {
     <nav 
       className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 
                  h-16 px-8 rounded-full 
-                 bg-flick-surface/80 backdrop-blur-xl 
+                 bg-chef-surface/80 backdrop-blur-xl 
                  border border-white/10 
                  flex items-center gap-10
                  shadow-cinematic"
@@ -69,16 +69,16 @@ const FloatingNav = ({ onVibeClick, onRandomClick, onComfortClick }) => {
       <motion.button
         onClick={onRandomClick}
         className="relative -mt-4 w-14 h-14 rounded-full 
-                   bg-flick-teal/20 border border-flick-teal/30
+                   bg-chef-teal/20 border border-chef-teal/30
                    flex items-center justify-center
                    shadow-glow-teal animate-pulse-glow
-                   hover:bg-flick-teal/30 hover:border-flick-teal/50
+                   hover:bg-chef-teal/30 hover:border-chef-teal/50
                    transition-all duration-300"
         whileHover={{ scale: 1.1, y: -2 }}
         whileTap={{ scale: 0.95 }}
         data-testid="nav-random-btn"
       >
-        <Shuffle className="w-6 h-6 text-flick-teal stroke-1" />
+        <Shuffle className="w-6 h-6 text-chef-teal stroke-1" />
       </motion.button>
       
       <NavItem

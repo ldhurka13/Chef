@@ -9,11 +9,11 @@ const VerticalSlider = ({ value, onChange, label, icon: Icon, lowLabel, highLabe
       {/* Icon and Label */}
       <div className="flex flex-col items-center gap-2">
         <Icon className={`w-6 h-6 ${color}`} strokeWidth={1.5} />
-        <span className="text-sm tracking-wide uppercase text-flick-muted">{label}</span>
+        <span className="text-sm tracking-wide uppercase text-chef-muted">{label}</span>
       </div>
       
       {/* High Label */}
-      <span className="text-xs text-flick-muted/60">{highLabel}</span>
+      <span className="text-xs text-chef-muted/60">{highLabel}</span>
       
       {/* Vertical Slider */}
       <div className="relative h-64 w-12 flex flex-col items-center">
@@ -29,9 +29,9 @@ const VerticalSlider = ({ value, onChange, label, icon: Icon, lowLabel, highLabe
         <motion.div
           className="absolute bottom-0 left-0 right-0 rounded-full"
           style={{
-            background: color === 'text-flick-teal' 
+            background: color === 'text-chef-teal' 
               ? 'rgba(45, 212, 191, 0.4)' 
-              : color === 'text-flick-orange' 
+              : color === 'text-chef-orange' 
                 ? 'rgba(249, 115, 22, 0.4)'
                 : 'rgba(192, 178, 131, 0.4)',
           }}
@@ -55,16 +55,16 @@ const VerticalSlider = ({ value, onChange, label, icon: Icon, lowLabel, highLabe
         
         {/* Thumb Indicator */}
         <motion.div
-          className="absolute left-1/2 -translate-x-1/2 w-10 h-2 bg-flick-platinum rounded-full shadow-lg"
+          className="absolute left-1/2 -translate-x-1/2 w-10 h-2 bg-chef-platinum rounded-full shadow-lg"
           style={{ bottom: `calc(${value}% - 4px)` }}
         />
       </div>
       
       {/* Low Label */}
-      <span className="text-xs text-flick-muted/60">{lowLabel}</span>
+      <span className="text-xs text-chef-muted/60">{lowLabel}</span>
       
       {/* Value Display */}
-      <span className="text-lg font-serif text-flick-platinum">{value}</span>
+      <span className="text-lg font-serif text-chef-platinum">{value}</span>
     </div>
   );
 };
@@ -112,7 +112,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
             className="relative w-full max-w-3xl mx-4 p-8 md:p-12 rounded-3xl
-                       bg-flick-surface/90 backdrop-blur-xl border border-white/10
+                       bg-chef-surface/90 backdrop-blur-xl border border-white/10
                        shadow-cinematic"
             onClick={(e) => e.stopPropagation()}
             data-testid="vibe-console-modal"
@@ -124,7 +124,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
                          hover:bg-white/10 transition-colors"
               data-testid="vibe-close-btn"
             >
-              <X className="w-5 h-5 text-flick-muted" strokeWidth={1.5} />
+              <X className="w-5 h-5 text-chef-muted" strokeWidth={1.5} />
             </button>
 
             {/* Header */}
@@ -132,7 +132,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
               <h2 className="font-serif text-3xl md:text-4xl tracking-tight mb-2">
                 Tune Your Vibe
               </h2>
-              <p className="text-flick-muted">
+              <p className="text-chef-muted">
                 Adjust the sliders to match your current mood
               </p>
             </div>
@@ -146,7 +146,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
                 icon={Brain}
                 lowLabel="Zoned Out"
                 highLabel="Deep Focus"
-                color="text-flick-teal"
+                color="text-chef-teal"
               />
               
               <VerticalSlider
@@ -156,7 +156,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
                 icon={Smile}
                 lowLabel="Need a Cry"
                 highLabel="Pure Joy"
-                color="text-flick-gold"
+                color="text-chef-gold"
               />
               
               <VerticalSlider
@@ -166,13 +166,13 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
                 icon={Zap}
                 lowLabel="Exhausted"
                 highLabel="Hyped"
-                color="text-flick-orange"
+                color="text-chef-orange"
               />
             </div>
 
             {/* Rewatches Toggle */}
             <div className="flex items-center justify-center gap-4 mb-10">
-              <span className="text-flick-muted">Include Rewatches</span>
+              <span className="text-chef-muted">Include Rewatches</span>
               <Switch
                 checked={localParams.include_rewatches}
                 onCheckedChange={(checked) => 
@@ -187,8 +187,8 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
               <button
                 onClick={handleReset}
                 className="flex items-center gap-2 px-6 py-3 rounded-full
-                           border border-white/10 text-flick-muted
-                           hover:bg-white/5 hover:text-flick-platinum
+                           border border-white/10 text-chef-muted
+                           hover:bg-white/5 hover:text-chef-platinum
                            transition-all duration-300"
                 data-testid="vibe-reset-btn"
               >
@@ -199,9 +199,9 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
               <button
                 onClick={handleApply}
                 className="px-8 py-3 rounded-full
-                           bg-flick-teal/20 border border-flick-teal/30
-                           text-flick-teal font-medium
-                           hover:bg-flick-teal/30 hover:border-flick-teal/50
+                           bg-chef-teal/20 border border-chef-teal/30
+                           text-chef-teal font-medium
+                           hover:bg-chef-teal/30 hover:border-chef-teal/50
                            shadow-glow-teal
                            transition-all duration-300"
                 data-testid="vibe-apply-btn"

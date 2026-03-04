@@ -8,7 +8,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Flick Noir & Grain Palette
+        // Chef Noir & Grain Palette
         flick: {
           bg: '#0A0A0B',
           surface: '#161618',

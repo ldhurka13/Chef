@@ -6,7 +6,7 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [birthYear, setBirthYear] = useState("1995");
+  const [birthDate, setBirthDate] = useState("");
   const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
@@ -23,7 +23,9 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
         setError("Password must be at least 6 characters");
         return;
       }
-      const result = await onSignup(email, password, username, parseInt(birthYear));
+      // Extract year from birth date for nostalgia calculations
+      const birthYear = birthDate ? new Date(birthDate).getFullYear() : 1995;
+      const result = await onSignup(email, password, username, birthYear, birthDate);
       if (result?.error) {
         setError(result.error);
       }
@@ -34,7 +36,7 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
     setEmail("");
     setPassword("");
     setUsername("");
-    setBirthYear("1995");
+    setBirthDate("");
     setError("");
   };
 
@@ -57,15 +59,15 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.3 }}
-            className="relative w-full max-w-md bg-flick-surface border border-white/10 
-                     rounded-lg shadow-cinematic overflow-hidden"
+            className="relative w-full max-w-md bg-chef-surface border border-white/10 
+                     shadow-cinematic overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 text-flick-muted 
-                       hover:text-flick-platinum transition-colors"
+              className="absolute top-4 right-4 p-2 text-chef-muted 
+                       hover:text-chef-platinum transition-colors"
               data-testid="auth-close-btn"
             >
               <X className="w-5 h-5" strokeWidth={1.5} />
@@ -73,10 +75,10 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
 
             {/* Header */}
             <div className="px-8 pt-8 pb-6 text-center">
-              <h2 className="font-serif text-2xl text-flick-platinum mb-2">
-                {mode === "login" ? "Welcome Back" : "Join Flick"}
+              <h2 className="font-serif text-2xl text-chef-platinum mb-2">
+                {mode === "login" ? "Welcome Back" : "Join Chef"}
               </h2>
-              <p className="text-sm text-flick-muted">
+              <p className="text-sm text-chef-muted">
                 {mode === "login" 
                   ? "Sign in to access your personalized recommendations" 
                   : "Create an account to save your preferences"}
@@ -87,27 +89,27 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
             <form onSubmit={handleSubmit} className="px-8 pb-8">
               {error && (
                 <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 
-                              text-red-400 text-sm rounded">
+                              text-red-400 text-sm">
                   {error}
                 </div>
               )}
 
               {mode === "signup" && (
                 <div className="mb-4">
-                  <label className="block text-xs text-flick-muted uppercase tracking-wider mb-2">
+                  <label className="block text-xs text-chef-muted uppercase tracking-wider mb-2">
                     Username
                   </label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-flick-muted" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-chef-muted" />
                     <input
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       required
                       placeholder="Choose a username"
-                      className="w-full pl-10 pr-4 py-3 bg-flick-bg border border-white/10 
-                               text-flick-platinum placeholder-flick-muted/50
-                               focus:border-flick-teal/50 focus:outline-none transition-colors"
+                      className="w-full pl-10 pr-4 py-3 bg-chef-bg border border-white/10 
+                               text-chef-platinum placeholder-chef-muted/50
+                               focus:border-chef-teal/50 focus:outline-none transition-colors"
                       data-testid="signup-username"
                     />
                   </div>
@@ -115,40 +117,40 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
               )}
 
               <div className="mb-4">
-                <label className="block text-xs text-flick-muted uppercase tracking-wider mb-2">
+                <label className="block text-xs text-chef-muted uppercase tracking-wider mb-2">
                   Email
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-flick-muted" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-chef-muted" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     placeholder="your@email.com"
-                    className="w-full pl-10 pr-4 py-3 bg-flick-bg border border-white/10 
-                             text-flick-platinum placeholder-flick-muted/50
-                             focus:border-flick-teal/50 focus:outline-none transition-colors"
+                    className="w-full pl-10 pr-4 py-3 bg-chef-bg border border-white/10 
+                             text-chef-platinum placeholder-chef-muted/50
+                             focus:border-chef-teal/50 focus:outline-none transition-colors"
                     data-testid="auth-email"
                   />
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-xs text-flick-muted uppercase tracking-wider mb-2">
+              <div className={mode === "signup" ? "mb-4" : "mb-6"}>
+                <label className="block text-xs text-chef-muted uppercase tracking-wider mb-2">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-flick-muted" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-chef-muted" />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder={mode === "signup" ? "Min 6 characters" : "••••••••"}
-                    className="w-full pl-10 pr-4 py-3 bg-flick-bg border border-white/10 
-                             text-flick-platinum placeholder-flick-muted/50
-                             focus:border-flick-teal/50 focus:outline-none transition-colors"
+                    className="w-full pl-10 pr-4 py-3 bg-chef-bg border border-white/10 
+                             text-chef-platinum placeholder-chef-muted/50
+                             focus:border-chef-teal/50 focus:outline-none transition-colors"
                     data-testid="auth-password"
                   />
                 </div>
@@ -156,21 +158,21 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
 
               {mode === "signup" && (
                 <div className="mb-6">
-                  <label className="block text-xs text-flick-muted uppercase tracking-wider mb-2">
-                    Birth Year (for nostalgia recommendations)
+                  <label className="block text-xs text-chef-muted uppercase tracking-wider mb-2">
+                    Birth Date
                   </label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-flick-muted" />
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-chef-muted" />
                     <input
-                      type="number"
-                      value={birthYear}
-                      onChange={(e) => setBirthYear(e.target.value)}
-                      min="1940"
-                      max="2010"
-                      className="w-full pl-10 pr-4 py-3 bg-flick-bg border border-white/10 
-                               text-flick-platinum
-                               focus:border-flick-teal/50 focus:outline-none transition-colors"
-                      data-testid="signup-birthyear"
+                      type="date"
+                      value={birthDate}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full pl-10 pr-4 py-3 bg-chef-bg border border-white/10 
+                               text-chef-platinum
+                               focus:border-chef-teal/50 focus:outline-none transition-colors
+                               [color-scheme:dark]"
+                      data-testid="signup-birthdate"
                     />
                   </div>
                 </div>
@@ -179,15 +181,15 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-flick-teal/20 border border-flick-teal/40
-                         text-flick-teal font-medium
-                         hover:bg-flick-teal/30 disabled:opacity-50
+                className="w-full py-3 bg-chef-teal/20 border border-chef-teal/40
+                         text-chef-teal font-medium
+                         hover:bg-chef-teal/30 disabled:opacity-50
                          transition-colors duration-200"
                 data-testid="auth-submit-btn"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-flick-teal border-t-transparent 
+                    <div className="w-4 h-4 border-2 border-chef-teal border-t-transparent 
                                   rounded-full animate-spin" />
                     {mode === "login" ? "Signing in..." : "Creating account..."}
                   </span>
@@ -198,7 +200,7 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
 
               {/* Switch Mode */}
               <div className="mt-6 text-center">
-                <span className="text-sm text-flick-muted">
+                <span className="text-sm text-chef-muted">
                   {mode === "login" ? "Don't have an account?" : "Already have an account?"}
                 </span>
                 <button
@@ -207,7 +209,7 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
                     resetForm();
                     onModeChange(mode === "login" ? "signup" : "login");
                   }}
-                  className="ml-2 text-sm text-flick-teal hover:text-flick-platinum transition-colors"
+                  className="ml-2 text-sm text-chef-teal hover:text-chef-platinum transition-colors"
                   data-testid="auth-switch-mode"
                 >
                   {mode === "login" ? "Sign Up" : "Sign In"}

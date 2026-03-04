@@ -35,8 +35,8 @@ const MovieCard = ({ movie, onClick, index }) => {
             onLoad={() => setImageLoaded(true)}
           />
         ) : (
-          <div className="w-full h-full bg-flick-surface flex items-center justify-center">
-            <span className="text-flick-muted text-sm">No Image</span>
+          <div className="w-full h-full bg-chef-surface flex items-center justify-center">
+            <span className="text-chef-muted text-sm">No Image</span>
           </div>
         )}
       </div>
@@ -63,9 +63,9 @@ const MovieCard = ({ movie, onClick, index }) => {
         {/* Match Percentage - Always Visible */}
         {movie.match_percentage && (
           <div className="mb-2">
-            <span className="inline-block px-2 py-1 rounded-full bg-flick-teal/20 
-                           text-flick-teal font-sans text-sm font-medium
-                           border border-flick-teal/30">
+            <span className="inline-block px-2 py-1 rounded-full bg-chef-teal/20 
+                           text-chef-teal font-sans text-sm font-medium
+                           border border-chef-teal/30">
               {movie.match_percentage}% Match
             </span>
           </div>
@@ -77,7 +77,7 @@ const MovieCard = ({ movie, onClick, index }) => {
         </h3>
 
         {/* Vibe Tag - Always Visible */}
-        <p className="text-flick-gold text-sm italic mt-1 line-clamp-1">
+        <p className="text-chef-gold text-sm italic mt-1 line-clamp-1">
           {movie.vibe_tag || "Worth discovering"}
         </p>
 
@@ -92,7 +92,7 @@ const MovieCard = ({ movie, onClick, index }) => {
             {movie.genres.slice(0, 2).map((genre, idx) => (
               <span
                 key={idx}
-                className="px-2 py-0.5 text-xs text-flick-muted bg-white/10 
+                className="px-2 py-0.5 text-xs text-chef-muted bg-white/10 
                            rounded-full backdrop-blur-sm"
               >
                 {genre}
@@ -106,7 +106,7 @@ const MovieCard = ({ movie, onClick, index }) => {
       <div 
         className={`absolute inset-0 rounded-2xl border transition-all duration-300
                     ${isHovered 
-                      ? 'border-flick-teal/30 shadow-glow-teal' 
+                      ? 'border-chef-teal/30 shadow-glow-teal' 
                       : 'border-white/5'}`}
       />
     </motion.div>

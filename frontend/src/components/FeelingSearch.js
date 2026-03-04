@@ -70,13 +70,13 @@ const FeelingSearch = ({ onMovieClick }) => {
           className={`relative flex items-center gap-2 px-4 py-2
                      transition-all duration-300 ease-out
                      border-b ${isFocused 
-                       ? 'border-flick-teal/50' 
+                       ? 'border-chef-teal/50' 
                        : 'border-white/20'}`}
         >
           {/* Sparkle Icon */}
           <Sparkles 
             className={`w-4 h-4 flex-shrink-0 transition-colors duration-300
-                       ${isFocused ? 'text-flick-teal' : 'text-flick-muted/60'}`}
+                       ${isFocused ? 'text-chef-teal' : 'text-chef-muted/60'}`}
             strokeWidth={1}
           />
           
@@ -89,7 +89,7 @@ const FeelingSearch = ({ onMovieClick }) => {
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder={placeholderSuggestions[placeholderIndex]}
-            className="flex-1 bg-transparent text-flick-platinum placeholder-flick-platinum/50
+            className="flex-1 bg-transparent text-chef-platinum placeholder-chef-platinum/50
                        text-sm font-normal tracking-wider
                        focus:outline-none"
             data-testid="feeling-search-input"
@@ -99,10 +99,10 @@ const FeelingSearch = ({ onMovieClick }) => {
           {query ? (
             <button
               onClick={handleClear}
-              className="p-1 hover:text-flick-platinum transition-colors"
+              className="p-1 hover:text-chef-platinum transition-colors"
               data-testid="feeling-search-clear"
             >
-              <X className="w-3 h-3 text-flick-muted" strokeWidth={1.5} />
+              <X className="w-3 h-3 text-chef-muted" strokeWidth={1.5} />
             </button>
           ) : null}
           
@@ -112,12 +112,12 @@ const FeelingSearch = ({ onMovieClick }) => {
             disabled={!query.trim() || isSearching}
             className={`p-1.5 transition-all duration-300
                        ${query.trim() 
-                         ? 'text-flick-teal hover:text-flick-platinum' 
-                         : 'text-flick-muted/40'}`}
+                         ? 'text-chef-teal hover:text-chef-platinum' 
+                         : 'text-chef-muted/40'}`}
             data-testid="feeling-search-btn"
           >
             {isSearching ? (
-              <div className="w-4 h-4 border border-flick-teal border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border border-chef-teal border-t-transparent rounded-full animate-spin" />
             ) : (
               <Search className="w-4 h-4" strokeWidth={1.5} />
             )}
@@ -133,8 +133,8 @@ const FeelingSearch = ({ onMovieClick }) => {
               exit={{ opacity: 0, y: 5 }}
               className="absolute top-full left-0 right-0 mt-3 px-4"
             >
-              <div className="bg-flick-surface/90 backdrop-blur-md border-l border-white/10 p-4">
-                <p className="text-[10px] text-flick-muted/60 uppercase tracking-[0.2em] mb-3">
+              <div className="bg-chef-surface/90 backdrop-blur-md border-l border-white/10 p-4">
+                <p className="text-[10px] text-chef-muted/60 uppercase tracking-[0.2em] mb-3">
                   Try saying
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -152,9 +152,9 @@ const FeelingSearch = ({ onMovieClick }) => {
                         setQuery(suggestion);
                         setIsFocused(false);
                       }}
-                      className="px-3 py-1 text-xs text-flick-muted/80
+                      className="px-3 py-1 text-xs text-chef-muted/80
                                border-b border-transparent
-                               hover:text-flick-platinum hover:border-flick-teal/30
+                               hover:text-chef-platinum hover:border-chef-teal/30
                                transition-all duration-200"
                     >
                       {suggestion}
@@ -174,7 +174,7 @@ const FeelingSearch = ({ onMovieClick }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-flick-bg/98 backdrop-blur-sm overflow-y-auto"
+            className="fixed inset-0 z-40 bg-chef-bg/98 backdrop-blur-sm overflow-y-auto"
           >
             <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
               {/* Header */}
@@ -183,14 +183,14 @@ const FeelingSearch = ({ onMovieClick }) => {
                   <h2 className="font-serif text-xl md:text-2xl tracking-tight">
                     Movies for "{query}"
                   </h2>
-                  <p className="text-flick-muted/60 text-sm mt-1">
+                  <p className="text-chef-muted/60 text-sm mt-1">
                     {results.length} matches
                   </p>
                 </div>
                 <button
                   onClick={() => setShowResults(false)}
-                  className="p-2 text-flick-muted hover:text-flick-platinum 
-                           border-b border-transparent hover:border-flick-teal/30
+                  className="p-2 text-chef-muted hover:text-chef-platinum 
+                           border-b border-transparent hover:border-chef-teal/30
                            transition-all duration-200"
                   data-testid="close-feeling-results"
                 >

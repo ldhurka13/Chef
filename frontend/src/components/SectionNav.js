@@ -21,8 +21,8 @@ const SectionNav = ({ activeSection, onSectionChange }) => {
             className={`relative whitespace-nowrap text-sm md:text-base font-medium tracking-wide
                        transition-colors duration-300 py-2
                        ${activeSection === section.id 
-                         ? 'text-flick-platinum' 
-                         : 'text-flick-muted/50 hover:text-flick-platinum'}`}
+                         ? 'text-chef-platinum' 
+                         : 'text-chef-muted/50 hover:text-chef-platinum'}`}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             data-testid={`section-${section.id}`}
@@ -33,7 +33,7 @@ const SectionNav = ({ activeSection, onSectionChange }) => {
             {activeSection === section.id && (
               <motion.div
                 layoutId="sectionUnderline"
-                className="absolute -bottom-0 left-0 right-0 h-[2px] bg-flick-teal"
+                className="absolute -bottom-0 left-0 right-0 h-[2px] bg-chef-teal"
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
               />
             )}

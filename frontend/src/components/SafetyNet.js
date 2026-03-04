@@ -23,10 +23,10 @@ const SafetyNet = ({ movies, onMovieClick, onRefresh }) => {
   if (!movies || movies.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-flick-muted text-lg mb-4">
+        <p className="text-chef-muted text-lg mb-4">
           Your watch history is empty
         </p>
-        <p className="text-flick-muted/60 text-sm max-w-md">
+        <p className="text-chef-muted/60 text-sm max-w-md">
           Start adding movies to build your personal collection and unlock the "I Can't Even" comfort feature!
         </p>
       </div>
@@ -50,8 +50,8 @@ const SafetyNet = ({ movies, onMovieClick, onRefresh }) => {
             data-testid={`history-movie-${movie.tmdb_id}`}
           >
             {/* Poster */}
-            <div className="aspect-[2/3] rounded-xl overflow-hidden bg-flick-surface mb-3
-                          ring-1 ring-white/5 group-hover:ring-flick-gold/30
+            <div className="aspect-[2/3] rounded-xl overflow-hidden bg-chef-surface mb-3
+                          ring-1 ring-white/5 group-hover:ring-chef-gold/30
                           transition-all duration-300">
               {movie.poster_path ? (
                 <img
@@ -62,7 +62,7 @@ const SafetyNet = ({ movies, onMovieClick, onRefresh }) => {
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-flick-muted text-xs">No Image</span>
+                  <span className="text-chef-muted text-xs">No Image</span>
                 </div>
               )}
               
@@ -78,11 +78,11 @@ const SafetyNet = ({ movies, onMovieClick, onRefresh }) => {
             
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
-                <Star className="w-3 h-3 text-flick-gold" fill="#C0B283" />
-                <span className="text-xs text-flick-gold">{movie.user_rating}/10</span>
+                <Star className="w-3 h-3 text-chef-gold" fill="#C0B283" />
+                <span className="text-xs text-chef-gold">{movie.user_rating}/10</span>
               </div>
               
-              <span className="text-xs text-flick-muted">
+              <span className="text-xs text-chef-muted">
                 {movie.watch_count > 1 ? `${movie.watch_count}x` : 'Once'}
               </span>
             </div>

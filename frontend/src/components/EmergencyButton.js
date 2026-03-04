@@ -8,7 +8,7 @@ const EmergencyButton = ({ onClick }) => {
       <motion.button
         onClick={onClick}
         className="relative px-8 py-4 rounded-full 
-                   bg-flick-gold/10 border border-flick-gold/30
+                   bg-chef-gold/10 border border-chef-gold/30
                    backdrop-blur-xl shadow-glow-gold
                    group overflow-hidden"
         whileHover={{ scale: 1.05, y: -2 }}
@@ -17,7 +17,7 @@ const EmergencyButton = ({ onClick }) => {
       >
         {/* Animated glow background */}
         <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-flick-gold/0 via-flick-gold/20 to-flick-gold/0"
+          className="absolute inset-0 bg-gradient-to-r from-chef-gold/0 via-chef-gold/20 to-chef-gold/0"
           animate={{
             x: ["-100%", "100%"],
           }}
@@ -30,15 +30,15 @@ const EmergencyButton = ({ onClick }) => {
         
         <div className="relative flex items-center gap-3">
           <Sparkles 
-            className="w-5 h-5 text-flick-gold transition-transform duration-300 
+            className="w-5 h-5 text-chef-gold transition-transform duration-300 
                        group-hover:rotate-12 group-hover:scale-110"
             strokeWidth={1.5}
           />
-          <span className="font-serif text-lg text-flick-gold tracking-wide">
+          <span className="font-serif text-lg text-chef-gold tracking-wide">
             I Can't Even
           </span>
           <Sparkles 
-            className="w-5 h-5 text-flick-gold transition-transform duration-300 
+            className="w-5 h-5 text-chef-gold transition-transform duration-300 
                        group-hover:-rotate-12 group-hover:scale-110"
             strokeWidth={1.5}
           />

@@ -36,7 +36,7 @@ CACHE_TTL = 3600  # 1 hour
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 
 # Create the main app
-app = FastAPI(title="Flick - Movie Recommendation Engine")
+app = FastAPI(title="Chef - Movie Recommendation Engine")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -89,6 +89,7 @@ class UserRegister(BaseModel):
     password: str
     username: str
     birth_year: int = 1995
+    birth_date: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: str
@@ -107,8 +108,14 @@ class UserProfile(BaseModel):
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     birth_year: Optional[int] = None
+    birth_date: Optional[str] = None
     avatar_url: Optional[str] = None
     favorite_genres: Optional[List[str]] = None
+
+class LocationPermissionUpdate(BaseModel):
+    location_permission: str  # "always", "ask", "never"
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 # ============ AUTH HELPERS ============
 
@@ -407,7 +414,7 @@ def generate_vibe_tag(genres: List[str], vibe_params: VibeParams, match: int) ->
 
 @api_router.get("/")
 async def root():
-    return {"message": "Flick - Context-Aware Movie Recommendations"}
+    return {"message": "Chef - Context-Aware Movie Recommendations"}
 
 # ============ AUTH ENDPOINTS ============
 
@@ -432,8 +439,11 @@ async def register(data: UserRegister):
         "username": data.username,
         "password_hash": hash_password(data.password),
         "birth_year": data.birth_year,
+        "birth_date": data.birth_date,
         "avatar_url": None,
         "favorite_genres": [],
+        "location_permission": None,
+        "location": None,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
@@ -449,8 +459,10 @@ async def register(data: UserRegister):
             "email": data.email.lower(),
             "username": data.username,
             "birth_year": data.birth_year,
+            "birth_date": data.birth_date,
             "avatar_url": None,
-            "favorite_genres": []
+            "favorite_genres": [],
+            "location_permission": None
         }
     }
 
@@ -474,8 +486,10 @@ async def login(data: UserLogin):
             "email": user["email"],
             "username": user["username"],
             "birth_year": user.get("birth_year", 1995),
+            "birth_date": user.get("birth_date"),
             "avatar_url": user.get("avatar_url"),
-            "favorite_genres": user.get("favorite_genres", [])
+            "favorite_genres": user.get("favorite_genres", []),
+            "location_permission": user.get("location_permission")
         }
     }
 
@@ -506,6 +520,9 @@ async def update_profile(data: UserUpdate, current_user: dict = Depends(get_curr
     if data.birth_year is not None:
         update_data["birth_year"] = data.birth_year
     
+    if data.birth_date is not None:
+        update_data["birth_date"] = data.birth_date
+    
     if data.avatar_url is not None:
         update_data["avatar_url"] = data.avatar_url
     
@@ -526,6 +543,26 @@ async def update_profile(data: UserUpdate, current_user: dict = Depends(get_curr
 async def logout():
     """Logout (client should delete token)"""
     return {"message": "Logged out successfully"}
+
+@api_router.put("/auth/location-permission")
+async def update_location_permission(data: LocationPermissionUpdate, current_user: dict = Depends(get_current_user)):
+    """Update user's location permission preference"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    update_data = {"location_permission": data.location_permission}
+    if data.latitude is not None and data.longitude is not None:
+        update_data["location"] = {
+            "latitude": data.latitude,
+            "longitude": data.longitude
+        }
+    
+    await db.auth_users.update_one(
+        {"id": current_user["id"]},
+        {"$set": update_data}
+    )
+    
+    return {"message": "Location permission updated", "location_permission": data.location_permission}
 
 # User endpoints
 @api_router.get("/user/profile")
@@ -918,8 +955,6 @@ async def get_explore_movies():
             "vibe_tag": "Expand your horizons",
             "match_percentage": min(int(movie.get("vote_average", 0) * 10), 100)
         })
-    
-    return {"results": movies}
     
     return {"results": movies}
 
@@ -1694,7 +1729,7 @@ async def startup_event():
     """Initialize genre map on startup"""
     global GENRE_MAP
     GENRE_MAP = get_genres()
-    logger.info("Flick API started, genre map loaded")
+    logger.info("Chef API started, genre map loaded")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

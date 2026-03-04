@@ -59,7 +59,7 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
               exit={{ opacity: 0, y: 30 }}
               transition={{ duration: 0.4 }}
               className="relative w-full max-w-4xl rounded-3xl overflow-hidden
-                         bg-flick-surface border border-white/10 shadow-cinematic"
+                         bg-chef-surface border border-white/10 shadow-cinematic"
               onClick={(e) => e.stopPropagation()}
               data-testid="movie-detail-modal"
             >
@@ -71,12 +71,12 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                            hover:bg-black/70 transition-colors"
                 data-testid="detail-close-btn"
               >
-                <X className="w-5 h-5 text-flick-platinum" strokeWidth={1.5} />
+                <X className="w-5 h-5 text-chef-platinum" strokeWidth={1.5} />
               </button>
 
               {loading ? (
                 <div className="h-96 flex items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-flick-teal border-t-transparent rounded-full animate-spin" />
+                  <div className="w-8 h-8 border-2 border-chef-teal border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : data ? (
                 <>
@@ -89,9 +89,9 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full bg-flick-surface-highlight" />
+                      <div className="w-full h-full bg-chef-surface-highlight" />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-flick-surface via-flick-surface/50 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-chef-surface via-chef-surface/50 to-transparent" />
                     
                     {/* Trailer Button */}
                     {details?.trailer_url && (
@@ -123,7 +123,7 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                             className="w-full rounded-xl shadow-cinematic"
                           />
                         ) : (
-                          <div className="w-full aspect-[2/3] bg-flick-surface-highlight rounded-xl" />
+                          <div className="w-full aspect-[2/3] bg-chef-surface-highlight rounded-xl" />
                         )}
                       </div>
 
@@ -134,10 +134,10 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                         </h2>
 
                         {/* Meta */}
-                        <div className="flex flex-wrap items-center gap-4 mb-6 text-flick-muted">
+                        <div className="flex flex-wrap items-center gap-4 mb-6 text-chef-muted">
                           {data.vote_average && (
                             <div className="flex items-center gap-1">
-                              <Star className="w-4 h-4 text-flick-gold" fill="#C0B283" />
+                              <Star className="w-4 h-4 text-chef-gold" fill="#C0B283" />
                               <span>{data.vote_average.toFixed(1)}</span>
                             </div>
                           )}
@@ -174,12 +174,12 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                         {(data.match_percentage || data.vibe_tag) && (
                           <div className="flex items-center gap-4 mb-6">
                             {data.match_percentage && (
-                              <span className="text-flick-teal font-medium">
+                              <span className="text-chef-teal font-medium">
                                 {data.match_percentage}% Match
                               </span>
                             )}
                             {data.vibe_tag && (
-                              <span className="text-flick-gold italic">
+                              <span className="text-chef-gold italic">
                                 {data.vibe_tag}
                               </span>
                             )}
@@ -188,7 +188,7 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
 
                         {/* Overview */}
                         {data.overview && (
-                          <p className="text-flick-muted leading-relaxed mb-8">
+                          <p className="text-chef-muted leading-relaxed mb-8">
                             {data.overview}
                           </p>
                         )}
@@ -197,8 +197,8 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                         <div className="flex flex-wrap gap-3">
                           {details?.in_history ? (
                             <div className="flex items-center gap-2 px-6 py-3 rounded-full
-                                          bg-flick-teal/20 border border-flick-teal/30
-                                          text-flick-teal">
+                                          bg-chef-teal/20 border border-chef-teal/30
+                                          text-chef-teal">
                               <Check className="w-4 h-4" />
                               <span>In your history (rated {details.user_rating}/10)</span>
                             </div>
@@ -214,14 +214,14 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                                     onChange={(e) => setUserRating(parseInt(e.target.value))}
                                     className="w-32"
                                   />
-                                  <span className="text-flick-gold font-serif text-xl w-8">
+                                  <span className="text-chef-gold font-serif text-xl w-8">
                                     {userRating}
                                   </span>
                                   <button
                                     onClick={handleAddToHistory}
-                                    className="px-4 py-2 rounded-full bg-flick-teal/20 
-                                             border border-flick-teal/30 text-flick-teal
-                                             hover:bg-flick-teal/30 transition-colors"
+                                    className="px-4 py-2 rounded-full bg-chef-teal/20 
+                                             border border-chef-teal/30 text-chef-teal
+                                             hover:bg-chef-teal/30 transition-colors"
                                     data-testid="confirm-rating-btn"
                                   >
                                     Save
@@ -231,8 +231,8 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                                 <button
                                   onClick={() => setShowRatingInput(true)}
                                   className="flex items-center gap-2 px-6 py-3 rounded-full
-                                           bg-flick-gold/10 border border-flick-gold/30
-                                           text-flick-gold hover:bg-flick-gold/20
+                                           bg-chef-gold/10 border border-chef-gold/30
+                                           text-chef-gold hover:bg-chef-gold/20
                                            transition-colors"
                                   data-testid="add-to-history-btn"
                                 >
@@ -260,12 +260,12 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                                   className="w-16 h-16 mx-auto rounded-full object-cover mb-2"
                                 />
                               ) : (
-                                <div className="w-16 h-16 mx-auto rounded-full bg-flick-surface-highlight mb-2" />
+                                <div className="w-16 h-16 mx-auto rounded-full bg-chef-surface-highlight mb-2" />
                               )}
-                              <p className="text-xs text-flick-platinum truncate">
+                              <p className="text-xs text-chef-platinum truncate">
                                 {person.name}
                               </p>
-                              <p className="text-xs text-flick-muted truncate">
+                              <p className="text-xs text-chef-muted truncate">
                                 {person.character}
                               </p>
                             </div>
@@ -290,12 +290,12 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                                   src={similar.poster_url}
                                   alt={similar.title}
                                   className="w-full aspect-[2/3] rounded-lg object-cover 
-                                           group-hover:ring-2 ring-flick-teal/50 transition-all"
+                                           group-hover:ring-2 ring-chef-teal/50 transition-all"
                                 />
                               ) : (
-                                <div className="w-full aspect-[2/3] rounded-lg bg-flick-surface-highlight" />
+                                <div className="w-full aspect-[2/3] rounded-lg bg-chef-surface-highlight" />
                               )}
-                              <p className="text-xs text-flick-muted mt-2 truncate">
+                              <p className="text-xs text-chef-muted mt-2 truncate">
                                 {similar.title}
                               </p>
                             </div>
@@ -307,7 +307,7 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                 </>
               ) : (
                 <div className="h-96 flex items-center justify-center">
-                  <p className="text-flick-muted">No movie data available</p>
+                  <p className="text-chef-muted">No movie data available</p>
                 </div>
               )}
             </motion.div>

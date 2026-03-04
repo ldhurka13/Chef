@@ -20,6 +20,7 @@ import CollectionCard from "./components/CollectionCard";
 import UserMenu from "./components/UserMenu";
 import AuthModal from "./components/AuthModal";
 import ProfileModal from "./components/ProfileModal";
+import LocationPermissionModal from "./components/LocationPermissionModal";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -29,6 +30,26 @@ const pageVariants = {
   initial: { opacity: 0 },
   animate: { opacity: 1, transition: { duration: 0.5, ease: "easeInOut" } },
   exit: { opacity: 0, transition: { duration: 0.3, ease: "easeInOut" } },
+};
+
+// Location helper
+const requestLocationData = () => {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+      },
+      () => resolve(null),
+      { timeout: 10000 }
+    );
+  });
 };
 
 function AppContent() {
@@ -49,6 +70,9 @@ function AppContent() {
   const [authMode, setAuthMode] = useState("login");
   const [authLoading, setAuthLoading] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [locationPermissionOpen, setLocationPermissionOpen] = useState(false);
+  const [pendingLoginData, setPendingLoginData] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
   
   // Vibe parameters
   const [vibeParams, setVibeParams] = useState({
@@ -122,6 +146,12 @@ function AppContent() {
           headers: { Authorization: `Bearer ${token}` }
         });
         setAuthUser(res.data);
+        
+        // Restore location permission from localStorage
+        const storedPerm = localStorage.getItem("chef_location_perm");
+        if (storedPerm === "always") {
+          requestLocationData().then(loc => { if (loc) setUserLocation(loc); });
+        }
       } catch (error) {
         localStorage.removeItem("flick_token");
       }
@@ -135,6 +165,25 @@ function AppContent() {
       localStorage.setItem("flick_token", res.data.token);
       setAuthUser(res.data.user);
       setAuthModalOpen(false);
+      
+      // Check location permission
+      const storedPerm = localStorage.getItem("chef_location_perm");
+      const userPerm = res.data.user.location_permission;
+      
+      if (userPerm === "always" || storedPerm === "always") {
+        // Silently request location
+        localStorage.setItem("chef_location_perm", "always");
+        requestLocationData().then(loc => { if (loc) setUserLocation(loc); });
+      } else if (userPerm === "never" || storedPerm === "never") {
+        localStorage.setItem("chef_location_perm", "never");
+      } else if (storedPerm === "ask" || userPerm === "ask") {
+        // Show location modal every time
+        setLocationPermissionOpen(true);
+      } else {
+        // No preference set yet — show modal
+        setLocationPermissionOpen(true);
+      }
+      
       toast.success(`Welcome back, ${res.data.user.username}!`);
       return { success: true };
     } catch (error) {
@@ -144,16 +193,20 @@ function AppContent() {
     }
   };
 
-  const handleSignup = async (email, password, username, birthYear) => {
+  const handleSignup = async (email, password, username, birthYear, birthDate) => {
     setAuthLoading(true);
     try {
       const res = await axios.post(`${API}/auth/register`, { 
-        email, password, username, birth_year: birthYear 
+        email, password, username, birth_year: birthYear, birth_date: birthDate || null
       });
       localStorage.setItem("flick_token", res.data.token);
       setAuthUser(res.data.user);
       setAuthModalOpen(false);
-      toast.success(`Welcome to Flick, ${res.data.user.username}!`);
+      
+      // New user — always show location permission modal
+      setLocationPermissionOpen(true);
+      
+      toast.success(`Welcome to Chef, ${res.data.user.username}!`);
       return { success: true };
     } catch (error) {
       return { error: error.response?.data?.detail || "Signup failed" };
@@ -162,9 +215,41 @@ function AppContent() {
     }
   };
 
+  const handleLocationPermission = async (option) => {
+    setLocationPermissionOpen(false);
+    localStorage.setItem("chef_location_perm", option);
+    
+    // Update backend
+    const token = localStorage.getItem("flick_token");
+    if (token) {
+      let locationData = {};
+      
+      if (option === "always" || option === "ask") {
+        const loc = await requestLocationData();
+        if (loc) {
+          setUserLocation(loc);
+          locationData = { latitude: loc.latitude, longitude: loc.longitude };
+        }
+      }
+      
+      try {
+        await axios.put(`${API}/auth/location-permission`, {
+          location_permission: option,
+          ...locationData
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } catch (error) {
+        console.error("Failed to update location permission:", error);
+      }
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("flick_token");
+    localStorage.removeItem("chef_location_perm");
     setAuthUser(null);
+    setUserLocation(null);
     toast.success("Logged out successfully");
   };
 
@@ -323,7 +408,7 @@ function AppContent() {
   const heroMovie = trendingMovies[0];
 
   return (
-    <div className="min-h-screen bg-flick-bg text-flick-platinum relative">
+    <div className="min-h-screen bg-chef-bg text-chef-platinum relative">
       <FilmGrain />
       <ShutterFlash show={showFlash} />
       
@@ -480,10 +565,10 @@ function AppContent() {
             className="max-w-4xl w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-serif text-2xl md:text-3xl text-center mb-2 text-flick-platinum">
+            <h2 className="font-serif text-2xl md:text-3xl text-center mb-2 text-chef-platinum">
               The Hangry Hail Mary
             </h2>
-            <p className="text-center text-flick-muted/60 text-sm mb-8">
+            <p className="text-center text-chef-muted/60 text-sm mb-8">
               For when you don't care what it is, as long as it's hot
             </p>
             
@@ -496,7 +581,7 @@ function AppContent() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: index * 0.1 }}
-                    className="bg-flick-surface/30 border border-white/5 overflow-hidden"
+                    className="bg-chef-surface/30 border border-white/5 overflow-hidden"
                   >
                     <div className="aspect-[2/3] skeleton" />
                     <div className="p-4 space-y-2">
@@ -514,7 +599,7 @@ function AppContent() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.15, duration: 0.4 }}
-                    className="bg-flick-surface/50 backdrop-blur-sm border border-white/5 overflow-hidden cursor-pointer group"
+                    className="bg-chef-surface/50 backdrop-blur-sm border border-white/5 overflow-hidden cursor-pointer group"
                     onClick={() => {
                       setRandomPicksOpen(false);
                       handleMovieClick(movie);
@@ -529,20 +614,20 @@ function AppContent() {
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
                       ) : (
-                        <div className="w-full h-full bg-flick-surface flex items-center justify-center">
-                          <span className="text-flick-muted">No Image</span>
+                        <div className="w-full h-full bg-chef-surface flex items-center justify-center">
+                          <span className="text-chef-muted">No Image</span>
                         </div>
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                       {movie.match_percentage && (
-                        <div className="absolute top-3 right-3 px-2 py-1 bg-flick-teal/20 border border-flick-teal/30 text-flick-teal text-xs">
+                        <div className="absolute top-3 right-3 px-2 py-1 bg-chef-teal/20 border border-chef-teal/30 text-chef-teal text-xs">
                           {movie.match_percentage}%
                         </div>
                       )}
                     </div>
                     <div className="p-4">
                       <h3 className="font-serif text-lg truncate">{movie.title}</h3>
-                      <p className="text-sm text-flick-teal mt-1">{movie.vibe_tag}</p>
+                      <p className="text-sm text-chef-teal mt-1">{movie.vibe_tag}</p>
                     </div>
                   </motion.div>
                 ))}
@@ -554,7 +639,7 @@ function AppContent() {
               <button
                 onClick={() => handleRandomPicks(true)}
                 disabled={randomLoading}
-                className="flex items-center gap-2 text-flick-teal hover:text-flick-platinum transition-colors text-sm disabled:opacity-50"
+                className="flex items-center gap-2 text-chef-teal hover:text-chef-platinum transition-colors text-sm disabled:opacity-50"
                 data-testid="refresh-random-btn"
               >
                 <svg 
@@ -569,7 +654,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setRandomPicksOpen(false)}
-                className="text-flick-muted hover:text-flick-platinum transition-colors text-sm"
+                className="text-chef-muted hover:text-chef-platinum transition-colors text-sm"
                 data-testid="close-random-btn"
               >
                 Close
@@ -593,10 +678,10 @@ function AppContent() {
             className="max-w-4xl w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-serif text-2xl md:text-3xl text-center mb-2 text-flick-gold">
+            <h2 className="font-serif text-2xl md:text-3xl text-center mb-2 text-chef-gold">
               Your Comfort Snacks
             </h2>
-            <p className="text-center text-flick-muted/60 text-sm mb-8">
+            <p className="text-center text-chef-muted/60 text-sm mb-8">
               Familiar favorites for when you need a warm hug
             </p>
             
@@ -609,7 +694,7 @@ function AppContent() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: index * 0.1 }}
-                    className="bg-flick-surface/30 border border-flick-gold/10 overflow-hidden"
+                    className="bg-chef-surface/30 border border-chef-gold/10 overflow-hidden"
                   >
                     <div className="aspect-[2/3] skeleton" />
                     <div className="p-4 space-y-2">
@@ -627,7 +712,7 @@ function AppContent() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.15, duration: 0.4 }}
-                    className="bg-flick-surface/50 backdrop-blur-sm border border-flick-gold/20 overflow-hidden cursor-pointer group"
+                    className="bg-chef-surface/50 backdrop-blur-sm border border-chef-gold/20 overflow-hidden cursor-pointer group"
                     onClick={() => {
                       setComfortOpen(false);
                       handleMovieClick(movie);
@@ -642,33 +727,33 @@ function AppContent() {
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
                       ) : (
-                        <div className="w-full h-full bg-flick-surface flex items-center justify-center">
-                          <span className="text-flick-muted">No Image</span>
+                        <div className="w-full h-full bg-chef-surface flex items-center justify-center">
+                          <span className="text-chef-muted">No Image</span>
                         </div>
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                       {movie.user_rating && (
-                        <div className="absolute top-3 right-3 px-2 py-1 bg-flick-gold/20 border border-flick-gold/30 text-flick-gold text-xs">
+                        <div className="absolute top-3 right-3 px-2 py-1 bg-chef-gold/20 border border-chef-gold/30 text-chef-gold text-xs">
                           {movie.user_rating}/10
                         </div>
                       )}
                       {movie.watch_count > 1 && (
-                        <div className="absolute top-3 left-3 px-2 py-1 bg-flick-surface/80 text-flick-muted text-xs">
+                        <div className="absolute top-3 left-3 px-2 py-1 bg-chef-surface/80 text-chef-muted text-xs">
                           Watched {movie.watch_count}x
                         </div>
                       )}
                     </div>
                     <div className="p-4">
                       <h3 className="font-serif text-lg truncate">{movie.title}</h3>
-                      <p className="text-sm text-flick-gold mt-1">{movie.vibe_tag}</p>
+                      <p className="text-sm text-chef-gold mt-1">{movie.vibe_tag}</p>
                     </div>
                   </motion.div>
                 ))}
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-flick-muted">No comfort movies yet.</p>
-                <p className="text-flick-muted/60 text-sm mt-2">
+                <p className="text-chef-muted">No comfort movies yet.</p>
+                <p className="text-chef-muted/60 text-sm mt-2">
                   Rate some movies 7+ to build your comfort collection!
                 </p>
               </div>
@@ -678,7 +763,7 @@ function AppContent() {
             <div className="mt-8 flex items-center justify-center">
               <button
                 onClick={() => setComfortOpen(false)}
-                className="text-flick-muted hover:text-flick-platinum transition-colors text-sm"
+                className="text-chef-muted hover:text-chef-platinum transition-colors text-sm"
                 data-testid="close-comfort-btn"
               >
                 Close
@@ -697,6 +782,12 @@ function AppContent() {
         onLogin={handleLogin}
         onSignup={handleSignup}
         loading={authLoading}
+      />
+      
+      {/* Location Permission Modal */}
+      <LocationPermissionModal
+        isOpen={locationPermissionOpen}
+        onSelect={handleLocationPermission}
       />
       
       {/* Profile Modal */}

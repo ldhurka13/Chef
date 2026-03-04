@@ -15,7 +15,7 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
           onMouseEnter={() => setHoveredItem("login")}
           onMouseLeave={() => setHoveredItem(null)}
           className="relative text-sm font-medium tracking-wide py-2
-                   text-flick-muted/60 hover:text-flick-platinum
+                   text-chef-muted/60 hover:text-chef-platinum
                    transition-colors duration-300"
           data-testid="login-btn"
         >
@@ -23,7 +23,7 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
           {hoveredItem === "login" && (
             <motion.div
               layoutId="authUnderline"
-              className="absolute -bottom-0 left-0 right-0 h-[2px] bg-flick-teal"
+              className="absolute -bottom-0 left-0 right-0 h-[2px] bg-chef-teal"
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
             />
           )}
@@ -33,7 +33,7 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
           onMouseEnter={() => setHoveredItem("signup")}
           onMouseLeave={() => setHoveredItem(null)}
           className="relative text-sm font-medium tracking-wide py-2
-                   text-flick-muted/60 hover:text-flick-platinum
+                   text-chef-muted/60 hover:text-chef-platinum
                    transition-colors duration-300"
           data-testid="signup-btn"
         >
@@ -41,7 +41,7 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
           {hoveredItem === "signup" && (
             <motion.div
               layoutId="authUnderline"
-              className="absolute -bottom-0 left-0 right-0 h-[2px] bg-flick-teal"
+              className="absolute -bottom-0 left-0 right-0 h-[2px] bg-chef-teal"
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
             />
           )}
@@ -56,7 +56,7 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 py-2
-                 text-flick-muted/60 hover:text-flick-platinum
+                 text-chef-muted/60 hover:text-chef-platinum
                  transition-colors duration-300"
         data-testid="user-menu-btn"
       >
@@ -97,16 +97,16 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               transition={{ duration: 0.15 }}
               className="absolute right-0 top-full mt-2 w-48 z-50
-                       bg-flick-surface/95 backdrop-blur-xl 
+                       bg-chef-surface/95 backdrop-blur-xl 
                        border border-white/10
                        shadow-cinematic overflow-hidden"
             >
               {/* User Info */}
               <div className="px-4 py-3 border-b border-white/10">
-                <p className="text-sm text-flick-platinum font-medium truncate">
+                <p className="text-sm text-chef-platinum font-medium truncate">
                   {user.username}
                 </p>
-                <p className="text-xs text-flick-muted truncate">
+                <p className="text-xs text-chef-muted truncate">
                   {user.email}
                 </p>
               </div>
@@ -118,8 +118,8 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
                     setIsOpen(false);
                     onProfileClick();
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-flick-muted
-                           hover:text-flick-platinum hover:bg-white/5 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-chef-muted
+                           hover:text-chef-platinum hover:bg-white/5 transition-colors"
                   data-testid="profile-menu-item"
                 >
                   <User className="w-4 h-4" strokeWidth={1.5} />
@@ -130,8 +130,8 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
                     setIsOpen(false);
                     onSettingsClick();
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-flick-muted
-                           hover:text-flick-platinum hover:bg-white/5 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-chef-muted
+                           hover:text-chef-platinum hover:bg-white/5 transition-colors"
                   data-testid="settings-menu-item"
                 >
                   <Settings className="w-4 h-4" strokeWidth={1.5} />

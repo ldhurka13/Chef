@@ -21,7 +21,7 @@ const MovieGrid = ({ movies, loading, onMovieClick }) => {
   if (!movies || movies.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-flick-muted text-lg">No movies found. Try adjusting your vibe!</p>
+        <p className="text-chef-muted text-lg">No movies found. Try adjusting your vibe!</p>
       </div>
     );
   }
