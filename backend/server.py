@@ -642,6 +642,219 @@ async def get_movie_details(movie_id: int):
         ]
     }
 
+# ============ FEELING SEARCH (Chat Feature) ============
+
+# Feeling to genre/keyword mapping for semantic search
+FEELING_MAPPINGS = {
+    # Emotions
+    "happy": {"genres": [35, 16, 10751], "keywords": ["feel-good", "comedy", "joy", "happy"]},
+    "sad": {"genres": [18, 10749], "keywords": ["emotional", "tragic", "tearjerker", "drama"]},
+    "excited": {"genres": [28, 12, 878], "keywords": ["action", "adventure", "thrilling"]},
+    "scared": {"genres": [27, 53], "keywords": ["horror", "scary", "thriller", "suspense"]},
+    "romantic": {"genres": [10749], "keywords": ["love", "romance", "romantic"]},
+    "nostalgic": {"genres": [16, 10751, 14], "keywords": ["classic", "childhood", "nostalgia"]},
+    "relaxed": {"genres": [35, 16, 10751], "keywords": ["calm", "peaceful", "light"]},
+    "anxious": {"genres": [53, 9648], "keywords": ["mystery", "suspense", "psychological"]},
+    "inspired": {"genres": [18, 36], "keywords": ["inspiring", "motivational", "true story"]},
+    "lonely": {"genres": [18, 10749], "keywords": ["solitude", "isolation", "connection"]},
+    "angry": {"genres": [28, 80], "keywords": ["revenge", "action", "crime"]},
+    "curious": {"genres": [99, 878, 9648], "keywords": ["documentary", "science", "mystery"]},
+    "bored": {"genres": [28, 12, 35], "keywords": ["entertaining", "fun", "exciting"]},
+    "tired": {"genres": [35, 16], "keywords": ["light", "easy", "comfort"]},
+    "adventurous": {"genres": [12, 14, 878], "keywords": ["adventure", "journey", "epic"]},
+    
+    # Moods/Vibes
+    "chill": {"genres": [35, 16, 10402], "keywords": ["relaxing", "calm", "easy"]},
+    "intense": {"genres": [28, 53, 80], "keywords": ["intense", "gripping", "edge"]},
+    "funny": {"genres": [35], "keywords": ["comedy", "hilarious", "laugh"]},
+    "dark": {"genres": [27, 53, 80], "keywords": ["dark", "noir", "gritty"]},
+    "uplifting": {"genres": [35, 18, 10751], "keywords": ["uplifting", "heartwarming", "hope"]},
+    "mind-bending": {"genres": [878, 9648, 53], "keywords": ["twist", "complex", "psychological"]},
+    "epic": {"genres": [12, 14, 28], "keywords": ["epic", "grand", "spectacular"]},
+    "cozy": {"genres": [35, 10751, 16], "keywords": ["comfort", "warm", "feel-good"]},
+    
+    # Situations
+    "rainy": {"genres": [18, 10749], "keywords": ["rainy day", "cozy", "melancholic"]},
+    "date": {"genres": [10749, 35], "keywords": ["romantic", "date night", "love"]},
+    "family": {"genres": [10751, 16, 12], "keywords": ["family", "kids", "animated"]},
+    "friends": {"genres": [35, 28, 12], "keywords": ["fun", "group", "entertaining"]},
+    "alone": {"genres": [18, 53, 9648], "keywords": ["solo", "introspective", "deep"]},
+    "party": {"genres": [35, 10402], "keywords": ["fun", "dance", "music"]},
+    "weekend": {"genres": [28, 12, 35], "keywords": ["blockbuster", "entertaining"]},
+    "late night": {"genres": [27, 53, 9648], "keywords": ["thriller", "mystery", "suspense"]},
+    
+    # Direct genre mentions
+    "action": {"genres": [28], "keywords": ["action", "fighting", "explosive"]},
+    "comedy": {"genres": [35], "keywords": ["comedy", "funny", "laugh"]},
+    "horror": {"genres": [27], "keywords": ["horror", "scary", "fear"]},
+    "drama": {"genres": [18], "keywords": ["drama", "emotional", "serious"]},
+    "sci-fi": {"genres": [878], "keywords": ["science fiction", "future", "space"]},
+    "fantasy": {"genres": [14], "keywords": ["fantasy", "magic", "mythical"]},
+    "thriller": {"genres": [53], "keywords": ["thriller", "suspense", "tense"]},
+    "animation": {"genres": [16], "keywords": ["animated", "cartoon", "pixar"]},
+    "documentary": {"genres": [99], "keywords": ["documentary", "real", "true"]},
+    "romance": {"genres": [10749], "keywords": ["romance", "love", "relationship"]},
+}
+
+class FeelingSearchRequest(BaseModel):
+    query: str
+    page: int = 1
+
+def parse_feeling_query(query: str) -> dict:
+    """Parse user's feeling query and extract relevant genres and keywords"""
+    query_lower = query.lower()
+    matched_genres = set()
+    matched_keywords = []
+    
+    # Check for feeling matches
+    for feeling, mapping in FEELING_MAPPINGS.items():
+        if feeling in query_lower:
+            matched_genres.update(mapping["genres"])
+            matched_keywords.extend(mapping["keywords"])
+    
+    # If no direct matches, try to infer from common words
+    if not matched_genres:
+        # Default mood detection
+        positive_words = ["good", "great", "amazing", "love", "enjoy", "fun", "laugh", "smile"]
+        negative_words = ["cry", "sad", "down", "depressed", "melancholy", "blue"]
+        intense_words = ["edge", "thrill", "intense", "gripping", "suspense", "heart"]
+        relaxed_words = ["relax", "calm", "peaceful", "quiet", "easy", "light", "chill"]
+        
+        for word in positive_words:
+            if word in query_lower:
+                matched_genres.update([35, 16, 10751])  # Comedy, Animation, Family
+                break
+        
+        for word in negative_words:
+            if word in query_lower:
+                matched_genres.update([18, 10749])  # Drama, Romance
+                break
+        
+        for word in intense_words:
+            if word in query_lower:
+                matched_genres.update([28, 53, 27])  # Action, Thriller, Horror
+                break
+        
+        for word in relaxed_words:
+            if word in query_lower:
+                matched_genres.update([35, 16, 10402])  # Comedy, Animation, Music
+                break
+    
+    # Default fallback - trending/popular
+    if not matched_genres:
+        matched_genres = {28, 35, 18, 12}  # Action, Comedy, Drama, Adventure
+    
+    return {
+        "genres": list(matched_genres)[:3],
+        "keywords": matched_keywords[:5],
+        "original_query": query
+    }
+
+def generate_feeling_vibe_tag(query: str, movie: dict) -> str:
+    """Generate a vibe tag based on the user's feeling query"""
+    query_lower = query.lower()
+    
+    # Match specific feelings to tags
+    if any(w in query_lower for w in ["happy", "joy", "fun", "laugh"]):
+        return "Perfect for lifting your spirits"
+    if any(w in query_lower for w in ["sad", "cry", "emotional"]):
+        return "Get ready for the feels"
+    if any(w in query_lower for w in ["scared", "horror", "spooky"]):
+        return "Will keep you on edge"
+    if any(w in query_lower for w in ["romantic", "love", "date"]):
+        return "Romantic vibes guaranteed"
+    if any(w in query_lower for w in ["excited", "action", "thrill"]):
+        return "Non-stop adrenaline"
+    if any(w in query_lower for w in ["tired", "relax", "chill", "cozy"]):
+        return "Easy comfort viewing"
+    if any(w in query_lower for w in ["nostalgic", "classic", "childhood"]):
+        return "A blast from the past"
+    if any(w in query_lower for w in ["curious", "mind", "think"]):
+        return "Food for thought"
+    if any(w in query_lower for w in ["alone", "lonely", "solo"]):
+        return "Perfect solo watch"
+    if any(w in query_lower for w in ["friends", "group", "party"]):
+        return "Great with friends"
+    
+    return f"Matches your '{query[:20]}...' vibe"
+
+@api_router.post("/movies/feeling-search")
+async def feeling_search(request: FeelingSearchRequest):
+    """
+    Search movies based on how the user is feeling.
+    Takes natural language input and returns relevant movies.
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    # Parse the feeling query
+    parsed = parse_feeling_query(request.query)
+    
+    # Search TMDB with parsed genres
+    discover_params = {
+        "sort_by": "popularity.desc",
+        "vote_count.gte": 50,
+        "page": request.page
+    }
+    
+    if parsed["genres"]:
+        discover_params["with_genres"] = ",".join(str(g) for g in parsed["genres"])
+    
+    data = tmdb_request("/discover/movie", discover_params)
+    
+    if not data:
+        # Fallback to trending if discover fails
+        data = tmdb_request("/trending/movie/week")
+    
+    if not data:
+        raise HTTPException(status_code=500, detail="Failed to search movies")
+    
+    # Also try keyword search for more relevance
+    keyword_results = []
+    if parsed["keywords"]:
+        search_data = tmdb_request("/search/movie", {"query": parsed["keywords"][0]})
+        if search_data and search_data.get("results"):
+            keyword_results = search_data["results"][:5]
+    
+    # Combine and deduplicate results
+    all_movies = data.get("results", [])
+    seen_ids = {m["id"] for m in all_movies}
+    for km in keyword_results:
+        if km["id"] not in seen_ids:
+            all_movies.insert(0, km)  # Prioritize keyword matches
+            seen_ids.add(km["id"])
+    
+    # Enhance with vibe tags and scores
+    enhanced_movies = []
+    for movie in all_movies[:20]:
+        genre_ids = movie.get("genre_ids", [])
+        genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+        
+        # Calculate a relevance score based on genre match
+        matched_genre_count = len(set(genre_ids) & set(parsed["genres"]))
+        relevance_score = min(70 + (matched_genre_count * 10) + int(movie.get("vote_average", 0) * 2), 100)
+        
+        enhanced_movies.append({
+            **movie,
+            "match_percentage": relevance_score,
+            "vibe_tag": generate_feeling_vibe_tag(request.query, movie),
+            "genres": genres,
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+        })
+    
+    # Sort by relevance
+    enhanced_movies.sort(key=lambda x: x["match_percentage"], reverse=True)
+    
+    return {
+        "results": enhanced_movies,
+        "query": request.query,
+        "parsed_feelings": parsed,
+        "page": data.get("page", 1),
+        "total_pages": data.get("total_pages", 1),
+    }
+
 @api_router.get("/genres")
 async def get_genre_list():
     """Get list of all genres"""

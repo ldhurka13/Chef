@@ -477,6 +477,109 @@ class FlickBackendTester:
             )
             return False
 
+    def test_feeling_search(self):
+        """Test new feeling-based search functionality"""
+        # Test various feeling queries
+        feeling_queries = [
+            {
+                "name": "Happy Feeling",
+                "query": "feeling happy and want something fun"
+            },
+            {
+                "name": "Sad/Emotional Feeling", 
+                "query": "feeling sad, need a good cry"
+            },
+            {
+                "name": "Nostalgic Feeling",
+                "query": "feeling nostalgic tonight"
+            },
+            {
+                "name": "Excited/Action Feeling",
+                "query": "feeling excited, want some action"
+            },
+            {
+                "name": "Romantic Feeling",
+                "query": "date night, something romantic"
+            },
+            {
+                "name": "Simple Word",
+                "query": "comedy"
+            }
+        ]
+        
+        all_passed = True
+        
+        for feeling_test in feeling_queries:
+            feeling_data = {
+                "query": feeling_test["query"],
+                "page": 1
+            }
+            
+            success, data, error = self.make_request("POST", "/movies/feeling-search", feeling_data)
+            
+            if success and data:
+                results = data.get("results", [])
+                query = data.get("query", "")
+                parsed_feelings = data.get("parsed_feelings", {})
+                
+                # Check required response fields
+                required_fields = ["results", "query", "parsed_feelings"]
+                missing_fields = [field for field in required_fields if field not in data]
+                
+                if not missing_fields and results:
+                    # Check first movie has required feeling search fields
+                    movie = results[0]
+                    movie_fields = ["match_percentage", "vibe_tag", "title"]
+                    missing_movie_fields = [field for field in movie_fields if field not in movie]
+                    
+                    if not missing_movie_fields:
+                        self.log_result(
+                            f"Feeling Search ({feeling_test['name']})",
+                            True,
+                            f"Query: '{query}' returned {len(results)} movies",
+                            {
+                                "query": query,
+                                "results_count": len(results),
+                                "sample_movie": {
+                                    "title": movie.get("title"),
+                                    "match_percentage": movie.get("match_percentage"),
+                                    "vibe_tag": movie.get("vibe_tag")
+                                },
+                                "parsed_genres": parsed_feelings.get("genres", []),
+                                "parsed_keywords": parsed_feelings.get("keywords", [])
+                            }
+                        )
+                    else:
+                        self.log_result(
+                            f"Feeling Search ({feeling_test['name']})",
+                            False,
+                            f"Movies missing required fields: {missing_movie_fields}"
+                        )
+                        all_passed = False
+                elif not results:
+                    # Empty results might be valid for some queries
+                    self.log_result(
+                        f"Feeling Search ({feeling_test['name']})",
+                        True,
+                        f"Query: '{query}' returned no results (might be expected)"
+                    )
+                else:
+                    self.log_result(
+                        f"Feeling Search ({feeling_test['name']})",
+                        False,
+                        f"Response missing required fields: {missing_fields}"
+                    )
+                    all_passed = False
+            else:
+                self.log_result(
+                    f"Feeling Search ({feeling_test['name']})",
+                    False,
+                    error or "Failed to get response"
+                )
+                all_passed = False
+        
+        return all_passed
+
     def run_all_tests(self):
         """Run complete test suite"""
         print("🎬 Starting Flick Backend API Test Suite")
@@ -506,6 +609,9 @@ class FlickBackendTester:
         
         # Test genres
         self.test_genres_endpoint()
+        
+        # Test new feeling search functionality
+        self.test_feeling_search()
         
         # Print summary
         print("=" * 60)

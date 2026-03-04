@@ -15,6 +15,7 @@ import MovieDetail from "./components/MovieDetail";
 import SafetyNet from "./components/SafetyNet";
 import FilmGrain from "./components/FilmGrain";
 import ShutterFlash from "./components/ShutterFlash";
+import FeelingSearch from "./components/FeelingSearch";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -154,6 +155,11 @@ function AppContent() {
     <div className="min-h-screen bg-flick-bg text-flick-platinum relative">
       <FilmGrain />
       <ShutterFlash show={showFlash} />
+      
+      {/* Feeling Search - Fixed at Top */}
+      <div className="fixed top-6 left-0 right-0 z-30">
+        <FeelingSearch onMovieClick={handleMovieClick} />
+      </div>
       
       <AnimatePresence mode="wait">
         <motion.div
