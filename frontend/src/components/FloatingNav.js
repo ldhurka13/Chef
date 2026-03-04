@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Home, Sliders, Heart, Film } from "lucide-react";
+import { Home, Sliders, Shuffle, Film } from "lucide-react";
 
 const NavItem = ({ icon: Icon, label, isActive, onClick }) => {
   return (
@@ -37,7 +37,7 @@ const NavItem = ({ icon: Icon, label, isActive, onClick }) => {
   );
 };
 
-const FloatingNav = ({ onVibeClick, onEmergencyClick }) => {
+const FloatingNav = ({ onVibeClick, onRandomClick }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -65,20 +65,20 @@ const FloatingNav = ({ onVibeClick, onEmergencyClick }) => {
         onClick={onVibeClick}
       />
       
-      {/* Emergency Button - Center Prominent */}
+      {/* Random Movie Button - Center Prominent */}
       <motion.button
-        onClick={onEmergencyClick}
+        onClick={onRandomClick}
         className="relative -mt-4 w-14 h-14 rounded-full 
-                   bg-flick-gold/20 border border-flick-gold/30
+                   bg-flick-teal/20 border border-flick-teal/30
                    flex items-center justify-center
-                   shadow-glow-gold animate-pulse-glow
-                   hover:bg-flick-gold/30 hover:border-flick-gold/50
+                   shadow-glow-teal animate-pulse-glow
+                   hover:bg-flick-teal/30 hover:border-flick-teal/50
                    transition-all duration-300"
         whileHover={{ scale: 1.1, y: -2 }}
         whileTap={{ scale: 0.95 }}
-        data-testid="nav-emergency-btn"
+        data-testid="nav-random-btn"
       >
-        <Heart className="w-6 h-6 text-flick-gold stroke-1" />
+        <Shuffle className="w-6 h-6 text-flick-teal stroke-1" />
       </motion.button>
       
       <NavItem
@@ -89,10 +89,10 @@ const FloatingNav = ({ onVibeClick, onEmergencyClick }) => {
       />
       
       <NavItem
-        icon={Heart}
-        label="Comfort"
+        icon={Shuffle}
+        label="Random"
         isActive={false}
-        onClick={onEmergencyClick}
+        onClick={onRandomClick}
       />
     </nav>
   );

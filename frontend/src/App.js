@@ -10,7 +10,6 @@ import HeroSection from "./components/HeroSection";
 import MovieGrid from "./components/MovieGrid";
 import FloatingNav from "./components/FloatingNav";
 import VibeConsole from "./components/VibeConsole";
-import EmergencyButton from "./components/EmergencyButton";
 import MovieDetail from "./components/MovieDetail";
 import SafetyNet from "./components/SafetyNet";
 import FilmGrain from "./components/FilmGrain";
@@ -33,7 +32,7 @@ function AppContent() {
   const [movieDetailOpen, setMovieDetailOpen] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [showFlash, setShowFlash] = useState(false);
-  const [safetyNetOpen, setSafetyNetOpen] = useState(false);
+  const [randomPicksOpen, setRandomPicksOpen] = useState(false);
   
   // Vibe parameters
   const [vibeParams, setVibeParams] = useState({
@@ -46,7 +45,7 @@ function AppContent() {
   // Data states
   const [trendingMovies, setTrendingMovies] = useState([]);
   const [discoveredMovies, setDiscoveredMovies] = useState([]);
-  const [emergencyMovies, setEmergencyMovies] = useState([]);
+  const [randomMovies, setRandomMovies] = useState([]);
   const [watchHistory, setWatchHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [discoverLoading, setDiscoverLoading] = useState(false);
@@ -99,26 +98,18 @@ function AppContent() {
     discoverMovies(newParams);
   }, [discoverMovies]);
 
-  // Handle emergency button
-  const handleEmergency = async () => {
+  // Handle random movie picks
+  const handleRandomPicks = async () => {
     setShowFlash(true);
-    
-    // Play shutter sound (optional - browser may block autoplay)
-    try {
-      const audio = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleRMMStXg7J9tIw5H09rnnXMrElHX3ue8hj0TSdLZ56R6NBdT1drmv4s6E0rR2OehdjIYUtTZ5cCNOxNL0djno3g0GFPVz+K9izkTStHY56R6NBhT1c/ivYs5E0rR2OekezUYU9XP4r2LORNK0djnpHs1GFPV0OK+izoTStHY56R7NRhT1dDivYs5E0rR2OekejQYU9XQ4r6LORNKz9fnpXs1GFLV0OK9ijkTSs/X56R6NBhT1dDivYo5E0rP1+ejejQYUtXQ4ryJOBNKz9bno3o0GFLU0OK8iTgTSs/W5qN6NBhS1NDiu4g4E0rP1uajejQYUtTQ4ruIOBNKz9bmo3o0GFLU0OK7iDgTSs/W5qN6NBhS1NDiu4g4E0rPz+WiejMYU9TP4rqHNxNKz9XnonkzGFHUzuG6hjcTS8/V5qJ5MxhR1M7guoY3E0vP1eaieTMYUdTO4LqGNxNLz9Xmonk");
-      audio.volume = 0.3;
-      audio.play().catch(() => {});
-    } catch {}
-    
-    setTimeout(() => setShowFlash(false), 300);
+    setTimeout(() => setShowFlash(false), 200);
     
     try {
-      const res = await axios.get(`${API}/movies/emergency`);
-      setEmergencyMovies(res.data.results || []);
-      setSafetyNetOpen(true);
+      const res = await axios.get(`${API}/movies/random-picks`);
+      setRandomMovies(res.data.results || []);
+      setRandomPicksOpen(true);
     } catch (error) {
-      console.error("Failed to get emergency movies:", error);
-      toast.error("No comfort movies found - add some favorites first!");
+      console.error("Failed to get random picks:", error);
+      toast.error("Failed to get movie recommendations");
     }
   };
 
@@ -231,7 +222,7 @@ function AppContent() {
       {/* Floating Navigation */}
       <FloatingNav 
         onVibeClick={() => setVibeConsoleOpen(true)}
-        onEmergencyClick={handleEmergency}
+        onRandomClick={handleRandomPicks}
       />
       
       {/* Vibe Console Modal */}
@@ -250,35 +241,38 @@ function AppContent() {
         onAddToHistory={handleAddToHistory}
       />
       
-      {/* Safety Net (Emergency Results) */}
-      {safetyNetOpen && emergencyMovies.length > 0 && (
+      {/* Random Picks Modal */}
+      {randomPicksOpen && randomMovies.length > 0 && (
         <div 
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setSafetyNetOpen(false)}
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4"
+          onClick={() => setRandomPicksOpen(false)}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="max-w-4xl w-full sepia-tone"
+            className="max-w-4xl w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-serif text-3xl md:text-4xl text-center mb-8 text-flick-gold">
-              Your Comfort Classics
+            <h2 className="font-serif text-2xl md:text-3xl text-center mb-2 text-flick-platinum">
+              Your Random Picks
             </h2>
+            <p className="text-center text-flick-muted/60 text-sm mb-8">
+              Based on your taste
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {emergencyMovies.map((movie, index) => (
+              {randomMovies.map((movie, index) => (
                 <motion.div
-                  key={movie.tmdb_id || index}
+                  key={movie.id || index}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="glass rounded-2xl overflow-hidden cursor-pointer group"
+                  className="bg-flick-surface/50 backdrop-blur-sm border border-white/5 overflow-hidden cursor-pointer group"
                   onClick={() => {
-                    setSafetyNetOpen(false);
-                    handleMovieClick({ id: movie.tmdb_id, ...movie });
+                    setRandomPicksOpen(false);
+                    handleMovieClick(movie);
                   }}
-                  data-testid={`emergency-movie-${index}`}
+                  data-testid={`random-movie-${index}`}
                 >
                   <div className="aspect-[2/3] relative overflow-hidden">
                     {movie.poster_url ? (
@@ -293,21 +287,23 @@ function AppContent() {
                       </div>
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                    {movie.match_percentage && (
+                      <div className="absolute top-3 right-3 px-2 py-1 bg-flick-teal/20 border border-flick-teal/30 text-flick-teal text-xs">
+                        {movie.match_percentage}%
+                      </div>
+                    )}
                   </div>
                   <div className="p-4">
                     <h3 className="font-serif text-lg truncate">{movie.title}</h3>
-                    <p className="text-sm text-flick-gold mt-1">{movie.vibe_tag}</p>
-                    <p className="text-sm text-flick-muted mt-1">
-                      Your rating: {movie.user_rating}/10
-                    </p>
+                    <p className="text-sm text-flick-teal mt-1">{movie.vibe_tag}</p>
                   </div>
                 </motion.div>
               ))}
             </div>
             <button
-              onClick={() => setSafetyNetOpen(false)}
-              className="mt-8 mx-auto block text-flick-muted hover:text-flick-platinum transition-colors"
-              data-testid="close-emergency-btn"
+              onClick={() => setRandomPicksOpen(false)}
+              className="mt-8 mx-auto block text-flick-muted hover:text-flick-platinum transition-colors text-sm"
+              data-testid="close-random-btn"
             >
               Close
             </button>

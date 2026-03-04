@@ -571,6 +571,105 @@ async def get_emergency_recommendations():
     
     return {"results": enriched}
 
+@api_router.get("/movies/random-picks")
+async def get_random_movie_picks():
+    """
+    Random Movie Picks:
+    - If user has rated movies: Return 3 movies similar to user's top 20 highest rated
+    - If no rated movies: Return 3 random popular movies from TMDB
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    user = await db.users.find_one({"username": "flick_user"}, {"_id": 0})
+    
+    recommendations = []
+    
+    if user:
+        # Get user's top 20 highest rated movies
+        top_rated = await db.watch_history.find(
+            {"user_id": user["id"]},
+            {"_id": 0}
+        ).sort("user_rating", -1).limit(20).to_list(20)
+        
+        if top_rated and len(top_rated) >= 1:
+            # Collect genres from top rated movies to find similar
+            genre_counts = {}
+            for movie in top_rated:
+                details = tmdb_request(f"/movie/{movie['tmdb_id']}")
+                if details:
+                    for genre in details.get("genres", []):
+                        gid = genre.get("id")
+                        if gid:
+                            genre_counts[gid] = genre_counts.get(gid, 0) + movie.get("user_rating", 5)
+            
+            # Get top genres by weighted count
+            top_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+            top_genre_ids = [g[0] for g in top_genres]
+            
+            # Get similar movies based on favorite genres
+            if top_genre_ids:
+                similar_data = tmdb_request("/discover/movie", {
+                    "sort_by": "vote_average.desc",
+                    "vote_count.gte": 200,
+                    "with_genres": ",".join(str(g) for g in top_genre_ids),
+                    "page": 1
+                })
+                
+                if similar_data and similar_data.get("results"):
+                    # Filter out movies already in watch history
+                    watched_ids = {m["tmdb_id"] for m in top_rated}
+                    candidates = [m for m in similar_data["results"] if m["id"] not in watched_ids]
+                    
+                    # Randomly pick 3 from top 10 candidates
+                    import random
+                    top_candidates = candidates[:10]
+                    random.shuffle(top_candidates)
+                    selected = top_candidates[:3]
+                    
+                    for movie in selected:
+                        genre_ids = movie.get("genre_ids", [])
+                        genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+                        recommendations.append({
+                            **movie,
+                            "genres": genres,
+                            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+                            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+                            "vibe_tag": "Based on your favorites",
+                            "match_percentage": min(85 + int(movie.get("vote_average", 0)), 99)
+                        })
+    
+    # Fallback: Get popular movies if no recommendations yet
+    if len(recommendations) < 3:
+        popular_data = tmdb_request("/movie/popular", {"page": 1})
+        
+        if popular_data and popular_data.get("results"):
+            import random
+            candidates = popular_data["results"][:20]
+            random.shuffle(candidates)
+            
+            # Fill remaining slots
+            for movie in candidates:
+                if len(recommendations) >= 3:
+                    break
+                # Skip if already in recommendations
+                if any(r.get("id") == movie.get("id") for r in recommendations):
+                    continue
+                    
+                genre_ids = movie.get("genre_ids", [])
+                genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+                recommendations.append({
+                    **movie,
+                    "genres": genres,
+                    "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+                    "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+                    "vibe_tag": "Popular pick",
+                    "match_percentage": min(70 + int(movie.get("vote_average", 0) * 2), 95)
+                })
+    
+    return {"results": recommendations[:3]}
+
 @api_router.get("/movies/{movie_id}")
 async def get_movie_details(movie_id: int):
     """Get detailed movie information"""
