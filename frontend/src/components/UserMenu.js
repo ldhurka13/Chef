@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Settings, LogOut, ChevronDown } from "lucide-react";
+import { User, Settings, LogOut, ChevronDown, FileText } from "lucide-react";
 
-const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClick, onSignupClick }) => {
+const UserMenu = ({ user, onLogout, onProfileClick, onDetailsClick, onSettingsClick, onLoginClick, onSignupClick }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
 
@@ -124,6 +124,18 @@ const UserMenu = ({ user, onLogout, onProfileClick, onSettingsClick, onLoginClic
                 >
                   <User className="w-4 h-4" strokeWidth={1.5} />
                   Profile
+                </button>
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    onDetailsClick();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-chef-muted
+                           hover:text-chef-platinum hover:bg-white/5 transition-colors"
+                  data-testid="details-menu-item"
+                >
+                  <FileText className="w-4 h-4" strokeWidth={1.5} />
+                  Details
                 </button>
                 <button
                   onClick={() => {

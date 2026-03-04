@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import axios from "axios";
 import { Toaster } from "./components/ui/sonner";
@@ -21,6 +21,7 @@ import UserMenu from "./components/UserMenu";
 import AuthModal from "./components/AuthModal";
 import ProfileModal from "./components/ProfileModal";
 import LocationPermissionModal from "./components/LocationPermissionModal";
+import UserDetails from "./components/UserDetails";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -54,6 +55,7 @@ const requestLocationData = () => {
 
 function AppContent() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [vibeConsoleOpen, setVibeConsoleOpen] = useState(false);
   const [movieDetailOpen, setMovieDetailOpen] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState(null);
@@ -428,6 +430,7 @@ function AppContent() {
               user={authUser}
               onLogout={handleLogout}
               onProfileClick={() => setProfileModalOpen(true)}
+              onDetailsClick={() => navigate("/details")}
               onSettingsClick={() => setProfileModalOpen(true)}
               onLoginClick={() => {
                 setAuthMode("login");
@@ -524,6 +527,15 @@ function AppContent() {
                     />
                   </section>
                 </main>
+              }
+            />
+            <Route
+              path="/details"
+              element={
+                <UserDetails
+                  user={authUser}
+                  onUserUpdate={(updated) => setAuthUser(updated)}
+                />
               }
             />
           </Routes>

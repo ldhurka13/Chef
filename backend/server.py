@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, UploadFile, File
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -116,6 +117,10 @@ class UserUpdate(BaseModel):
     birth_date: Optional[str] = None
     avatar_url: Optional[str] = None
     favorite_genres: Optional[List[str]] = None
+    gender: Optional[str] = None
+    bio: Optional[str] = None
+    favorite_actors: Optional[List[str]] = None
+    favorite_movies: Optional[List[Dict[str, Any]]] = None
 
 class LocationPermissionUpdate(BaseModel):
     location_permission: str  # "always", "ask", "never"
@@ -494,7 +499,13 @@ async def login(data: UserLogin):
             "birth_date": user.get("birth_date"),
             "avatar_url": user.get("avatar_url"),
             "favorite_genres": user.get("favorite_genres", []),
-            "location_permission": user.get("location_permission")
+            "location_permission": user.get("location_permission"),
+            "gender": user.get("gender"),
+            "bio": user.get("bio"),
+            "favorite_actors": user.get("favorite_actors", []),
+            "favorite_movies": user.get("favorite_movies", []),
+            "letterboxd_connected": user.get("letterboxd_connected", False),
+            "letterboxd_count": user.get("letterboxd_count", 0)
         }
     }
 
@@ -534,6 +545,18 @@ async def update_profile(data: UserUpdate, current_user: dict = Depends(get_curr
     if data.favorite_genres is not None:
         update_data["favorite_genres"] = data.favorite_genres
     
+    if data.gender is not None:
+        update_data["gender"] = data.gender
+    
+    if data.bio is not None:
+        update_data["bio"] = data.bio[:150]
+    
+    if data.favorite_actors is not None:
+        update_data["favorite_actors"] = data.favorite_actors[:20]
+    
+    if data.favorite_movies is not None:
+        update_data["favorite_movies"] = data.favorite_movies[:5]
+    
     if update_data:
         await db.auth_users.update_one(
             {"id": current_user["id"]},
@@ -568,6 +591,201 @@ async def update_location_permission(data: LocationPermissionUpdate, current_use
     )
     
     return {"message": "Location permission updated", "location_permission": data.location_permission}
+
+@api_router.post("/auth/upload-avatar")
+async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Upload user avatar photo"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Validate file type
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP, and GIF images are allowed")
+    
+    # Read file (max 2MB)
+    contents = await file.read()
+    if len(contents) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size must be under 2MB")
+    
+    # Save to uploads directory
+    os.makedirs("/app/uploads/avatars", exist_ok=True)
+    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    filename = f"{current_user['id']}.{ext}"
+    filepath = f"/app/uploads/avatars/{filename}"
+    
+    with open(filepath, "wb") as f:
+        f.write(contents)
+    
+    # Store URL path in user record
+    avatar_url = f"/api/uploads/avatars/{filename}"
+    await db.auth_users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"avatar_url": avatar_url}}
+    )
+    
+    return {"avatar_url": avatar_url}
+
+@api_router.post("/auth/import-letterboxd")
+async def import_letterboxd(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Import Letterboxd CSV data"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are accepted")
+    
+    contents = await file.read()
+    if len(contents) > 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size must be under 1MB")
+    
+    try:
+        text = contents.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = contents.decode("latin-1")
+    
+    import csv
+    import io
+    
+    reader = csv.DictReader(io.StringIO(text))
+    entries = []
+    
+    for row in reader:
+        entry = {}
+        # Core fields from Letterboxd format
+        if row.get("Title"):
+            entry["title"] = row["Title"].strip()
+        elif row.get("Name"):
+            entry["title"] = row["Name"].strip()
+        else:
+            continue
+        
+        if row.get("Year"):
+            try:
+                entry["year"] = int(row["Year"])
+            except (ValueError, TypeError):
+                pass
+        
+        # Rating (Letterboxd uses 0.5-5 scale)
+        if row.get("Rating"):
+            try:
+                rating_5 = float(row["Rating"])
+                entry["rating_5"] = rating_5
+                entry["rating_10"] = int(rating_5 * 2)
+            except (ValueError, TypeError):
+                pass
+        
+        # Rating10 (1-10 scale)
+        if row.get("Rating10"):
+            try:
+                entry["rating_10"] = int(row["Rating10"])
+                entry["rating_5"] = float(row["Rating10"]) / 2
+            except (ValueError, TypeError):
+                pass
+        
+        if row.get("WatchedDate"):
+            entry["watched_date"] = row["WatchedDate"].strip()
+        
+        if row.get("Rewatch"):
+            entry["rewatch"] = row["Rewatch"].strip().lower() == "true"
+        
+        if row.get("Tags"):
+            entry["tags"] = [t.strip() for t in row["Tags"].split(",")]
+        
+        if row.get("Review"):
+            entry["review"] = row["Review"].strip()[:500]
+        
+        if row.get("tmdbID"):
+            try:
+                entry["tmdb_id"] = int(row["tmdbID"])
+            except (ValueError, TypeError):
+                pass
+        
+        if row.get("imdbID"):
+            entry["imdb_id"] = row["imdbID"].strip()
+        
+        if row.get("LetterboxdURI") or row.get("url"):
+            entry["letterboxd_uri"] = (row.get("LetterboxdURI") or row.get("url", "")).strip()
+        
+        entries.append(entry)
+    
+    if not entries:
+        raise HTTPException(status_code=400, detail="No valid entries found in CSV")
+    
+    # Store in MongoDB
+    import_doc = {
+        "user_id": current_user["id"],
+        "entries": entries,
+        "total_movies": len(entries),
+        "rated_movies": sum(1 for e in entries if e.get("rating_5") or e.get("rating_10")),
+        "imported_at": datetime.now(timezone.utc).isoformat(),
+        "filename": file.filename
+    }
+    
+    # Upsert — replace previous import for this user
+    await db.letterboxd_imports.update_one(
+        {"user_id": current_user["id"]},
+        {"$set": import_doc},
+        upsert=True
+    )
+    
+    # Update user flag
+    await db.auth_users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"letterboxd_connected": True, "letterboxd_count": len(entries)}}
+    )
+    
+    return {
+        "message": f"Successfully imported {len(entries)} movies from Letterboxd",
+        "total": len(entries),
+        "rated": sum(1 for e in entries if e.get("rating_5") or e.get("rating_10")),
+        "sample": entries[:3]
+    }
+
+@api_router.get("/auth/letterboxd-data")
+async def get_letterboxd_data(current_user: dict = Depends(get_current_user)):
+    """Get user's imported Letterboxd data"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    data = await db.letterboxd_imports.find_one(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    )
+    
+    if not data:
+        return {"connected": False}
+    
+    return {
+        "connected": True,
+        "total_movies": data.get("total_movies", 0),
+        "rated_movies": data.get("rated_movies", 0),
+        "imported_at": data.get("imported_at"),
+        "filename": data.get("filename"),
+        "entries": data.get("entries", [])
+    }
+
+@api_router.get("/movies/search-tmdb")
+async def search_tmdb_movies(query: str):
+    """Search TMDB for movies (for favorite movie picker)"""
+    if not query or len(query) < 2:
+        return {"results": []}
+    
+    data = tmdb_request("/search/movie", {"query": query, "language": "en-US", "page": 1})
+    if not data:
+        return {"results": []}
+    
+    results = []
+    for movie in data.get("results", [])[:8]:
+        results.append({
+            "id": movie["id"],
+            "title": movie.get("title", ""),
+            "year": movie.get("release_date", "")[:4] if movie.get("release_date") else "",
+            "poster_url": get_image_url(movie.get("poster_path"), "w185"),
+            "rating": round(movie.get("vote_average", 0), 1)
+        })
+    
+    return {"results": results}
 
 # User endpoints
 @api_router.get("/user/profile")
@@ -1944,6 +2162,14 @@ async def seed_initial_data():
 
 # Include the router in the main app
 app.include_router(api_router)
+
+# Serve uploaded avatar files
+@app.get("/api/uploads/avatars/{filename}")
+async def serve_avatar(filename: str):
+    filepath = f"/app/uploads/avatars/{filename}"
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    return FileResponse(filepath)
 
 app.add_middleware(
     CORSMiddleware,
