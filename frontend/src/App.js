@@ -17,6 +17,9 @@ import ShutterFlash from "./components/ShutterFlash";
 import FeelingSearch from "./components/FeelingSearch";
 import SectionNav from "./components/SectionNav";
 import CollectionCard from "./components/CollectionCard";
+import UserMenu from "./components/UserMenu";
+import AuthModal from "./components/AuthModal";
+import ProfileModal from "./components/ProfileModal";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -39,6 +42,13 @@ function AppContent() {
   const [comfortOpen, setComfortOpen] = useState(false);
   const [comfortLoading, setComfortLoading] = useState(false);
   const [comfortMovies, setComfortMovies] = useState([]);
+  
+  // Auth state
+  const [authUser, setAuthUser] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   
   // Vibe parameters
   const [vibeParams, setVibeParams] = useState({
@@ -103,8 +113,79 @@ function AppContent() {
     fetchSectionMovies(section);
   }, [fetchSectionMovies]);
 
+  // Auth functions
+  const checkAuth = async () => {
+    const token = localStorage.getItem("flick_token");
+    if (token) {
+      try {
+        const res = await axios.get(`${API}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setAuthUser(res.data);
+      } catch (error) {
+        localStorage.removeItem("flick_token");
+      }
+    }
+  };
+
+  const handleLogin = async (email, password) => {
+    setAuthLoading(true);
+    try {
+      const res = await axios.post(`${API}/auth/login`, { email, password });
+      localStorage.setItem("flick_token", res.data.token);
+      setAuthUser(res.data.user);
+      setAuthModalOpen(false);
+      toast.success(`Welcome back, ${res.data.user.username}!`);
+      return { success: true };
+    } catch (error) {
+      return { error: error.response?.data?.detail || "Login failed" };
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignup = async (email, password, username, birthYear) => {
+    setAuthLoading(true);
+    try {
+      const res = await axios.post(`${API}/auth/register`, { 
+        email, password, username, birth_year: birthYear 
+      });
+      localStorage.setItem("flick_token", res.data.token);
+      setAuthUser(res.data.user);
+      setAuthModalOpen(false);
+      toast.success(`Welcome to Flick, ${res.data.user.username}!`);
+      return { success: true };
+    } catch (error) {
+      return { error: error.response?.data?.detail || "Signup failed" };
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("flick_token");
+    setAuthUser(null);
+    toast.success("Logged out successfully");
+  };
+
+  const handleUpdateProfile = async (data) => {
+    const token = localStorage.getItem("flick_token");
+    try {
+      const res = await axios.put(`${API}/auth/profile`, data, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAuthUser(res.data);
+      toast.success("Profile updated!");
+    } catch (error) {
+      toast.error("Failed to update profile");
+    }
+  };
+
   // Initialize data
   useEffect(() => {
+    // Check auth on mount
+    checkAuth();
+    
     const initializeData = async () => {
       try {
         // Seed initial data
@@ -246,9 +327,32 @@ function AppContent() {
       <FilmGrain />
       <ShutterFlash show={showFlash} />
       
-      {/* Feeling Search - Fixed at Top */}
-      <div className="fixed top-6 left-0 right-0 z-30">
-        <FeelingSearch onMovieClick={handleMovieClick} />
+      {/* Top Bar - Search and User Menu */}
+      <div className="fixed top-0 left-0 right-0 z-30 px-4 md:px-8 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          {/* Feeling Search */}
+          <div className="flex-1 max-w-xl">
+            <FeelingSearch onMovieClick={handleMovieClick} />
+          </div>
+          
+          {/* User Menu */}
+          <div className="ml-4">
+            <UserMenu
+              user={authUser}
+              onLogout={handleLogout}
+              onProfileClick={() => setProfileModalOpen(true)}
+              onSettingsClick={() => setProfileModalOpen(true)}
+              onLoginClick={() => {
+                setAuthMode("login");
+                setAuthModalOpen(true);
+              }}
+              onSignupClick={() => {
+                setAuthMode("signup");
+                setAuthModalOpen(true);
+              }}
+            />
+          </div>
+        </div>
       </div>
       
       <AnimatePresence mode="wait">
@@ -263,7 +367,7 @@ function AppContent() {
             <Route
               path="/"
               element={
-                <main className="pb-24">
+                <main className="pb-24 pt-16">
                   {/* Hero Section */}
                   <HeroSection 
                     movie={heroMovie} 
@@ -583,6 +687,26 @@ function AppContent() {
           </motion.div>
         </div>
       )}
+      
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        mode={authMode}
+        onModeChange={setAuthMode}
+        onLogin={handleLogin}
+        onSignup={handleSignup}
+        loading={authLoading}
+      />
+      
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+        user={authUser}
+        watchHistory={watchHistory}
+        onUpdateProfile={handleUpdateProfile}
+      />
       
       <Toaster 
         position="bottom-center"

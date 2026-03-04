@@ -1,17 +1,19 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import requests
 import time
 import json
+import hashlib
+import secrets
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -29,6 +31,9 @@ IMAGE_BASE_URL = "https://image.tmdb.org/t/p/"
 # Cache for TMDB requests
 tmdb_cache = {}
 CACHE_TTL = 3600  # 1 hour
+
+# JWT Secret (simple implementation)
+JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 
 # Create the main app
 app = FastAPI(title="Flick - Movie Recommendation Engine")
@@ -76,6 +81,84 @@ class VibeParams(BaseModel):
     energy: int = Field(ge=0, le=100, default=50)  # Pacing/Action
     include_rewatches: bool = False
     page: int = 1
+
+# ============ AUTH MODELS ============
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    username: str
+    birth_year: int = 1995
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserProfile(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    email: str
+    username: str
+    birth_year: int = 1995
+    avatar_url: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    favorite_genres: List[str] = []
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    birth_year: Optional[int] = None
+    avatar_url: Optional[str] = None
+    favorite_genres: Optional[List[str]] = None
+
+# ============ AUTH HELPERS ============
+
+def hash_password(password: str) -> str:
+    """Hash password with salt"""
+    salt = JWT_SECRET[:16]
+    return hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against hash"""
+    return hash_password(password) == hashed
+
+def create_token(user_id: str) -> str:
+    """Create a simple token (user_id:timestamp:signature)"""
+    timestamp = str(int(time.time()))
+    data = f"{user_id}:{timestamp}"
+    signature = hashlib.sha256(f"{data}:{JWT_SECRET}".encode()).hexdigest()[:16]
+    return f"{data}:{signature}"
+
+def verify_token(token: str) -> Optional[str]:
+    """Verify token and return user_id if valid"""
+    try:
+        parts = token.split(":")
+        if len(parts) != 3:
+            return None
+        user_id, timestamp, signature = parts
+        # Check signature
+        data = f"{user_id}:{timestamp}"
+        expected_sig = hashlib.sha256(f"{data}:{JWT_SECRET}".encode()).hexdigest()[:16]
+        if signature != expected_sig:
+            return None
+        # Check expiration (7 days)
+        if int(time.time()) - int(timestamp) > 7 * 24 * 3600:
+            return None
+        return user_id
+    except:
+        return None
+
+async def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """Get current user from token"""
+    if not authorization:
+        return None
+    
+    token = authorization.replace("Bearer ", "")
+    user_id = verify_token(token)
+    if not user_id:
+        return None
+    
+    user = await db.auth_users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    return user
 
 # ============ TMDB SERVICE ============
 
@@ -325,6 +408,124 @@ def generate_vibe_tag(genres: List[str], vibe_params: VibeParams, match: int) ->
 @api_router.get("/")
 async def root():
     return {"message": "Flick - Context-Aware Movie Recommendations"}
+
+# ============ AUTH ENDPOINTS ============
+
+@api_router.post("/auth/register")
+async def register(data: UserRegister):
+    """Register a new user"""
+    # Check if email already exists
+    existing = await db.auth_users.find_one({"email": data.email.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Check if username exists
+    existing_username = await db.auth_users.find_one({"username": data.username})
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Username already taken")
+    
+    # Create user
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": data.email.lower(),
+        "username": data.username,
+        "password_hash": hash_password(data.password),
+        "birth_year": data.birth_year,
+        "avatar_url": None,
+        "favorite_genres": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.auth_users.insert_one(user_doc)
+    
+    # Create token
+    token = create_token(user_id)
+    
+    return {
+        "token": token,
+        "user": {
+            "id": user_id,
+            "email": data.email.lower(),
+            "username": data.username,
+            "birth_year": data.birth_year,
+            "avatar_url": None,
+            "favorite_genres": []
+        }
+    }
+
+@api_router.post("/auth/login")
+async def login(data: UserLogin):
+    """Login user"""
+    user = await db.auth_users.find_one({"email": data.email.lower()})
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    if not verify_password(data.password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Create token
+    token = create_token(user["id"])
+    
+    return {
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "username": user["username"],
+            "birth_year": user.get("birth_year", 1995),
+            "avatar_url": user.get("avatar_url"),
+            "favorite_genres": user.get("favorite_genres", [])
+        }
+    }
+
+@api_router.get("/auth/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    """Get current logged in user"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return current_user
+
+@api_router.put("/auth/profile")
+async def update_profile(data: UserUpdate, current_user: dict = Depends(get_current_user)):
+    """Update user profile"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    update_data = {}
+    if data.username is not None:
+        # Check username not taken
+        existing = await db.auth_users.find_one({
+            "username": data.username, 
+            "id": {"$ne": current_user["id"]}
+        })
+        if existing:
+            raise HTTPException(status_code=400, detail="Username already taken")
+        update_data["username"] = data.username
+    
+    if data.birth_year is not None:
+        update_data["birth_year"] = data.birth_year
+    
+    if data.avatar_url is not None:
+        update_data["avatar_url"] = data.avatar_url
+    
+    if data.favorite_genres is not None:
+        update_data["favorite_genres"] = data.favorite_genres
+    
+    if update_data:
+        await db.auth_users.update_one(
+            {"id": current_user["id"]},
+            {"$set": update_data}
+        )
+    
+    # Return updated user
+    user = await db.auth_users.find_one({"id": current_user["id"]}, {"_id": 0, "password_hash": 0})
+    return user
+
+@api_router.post("/auth/logout")
+async def logout():
+    """Logout (client should delete token)"""
+    return {"message": "Logged out successfully"}
 
 # User endpoints
 @api_router.get("/user/profile")
