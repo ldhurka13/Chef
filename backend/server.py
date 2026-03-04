@@ -1198,19 +1198,115 @@ class ComfortRequest(BaseModel):
     hour: int = 12  # Hour of day (0-23)
     is_cold: bool = False  # Weather condition
     is_rainy: bool = False
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+# Weather cache (short TTL since weather changes)
+weather_cache = {}
+WEATHER_CACHE_TTL = 1800  # 30 minutes
+
+def fetch_weather(latitude: float, longitude: float) -> dict:
+    """Fetch current weather from Open-Meteo API (free, no key needed)"""
+    cache_key = f"{round(latitude, 2)}_{round(longitude, 2)}"
+    cached = weather_cache.get(cache_key)
+    if cached and time.time() - cached["ts"] < WEATHER_CACHE_TTL:
+        return cached["data"]
+    
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "current_weather": "true",
+            "hourly": "temperature_2m,relative_humidity_2m,rain,weathercode",
+            "forecast_days": 1,
+            "timezone": "auto"
+        }
+        res = requests.get(url, params=params, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        
+        current = data.get("current_weather", {})
+        temperature = current.get("temperature", 20)
+        weathercode = current.get("weathercode", 0)
+        
+        # WMO Weather codes: 0-3 clear/cloudy, 45-48 fog, 51-67 drizzle/rain, 71-77 snow, 80-99 showers/thunderstorms
+        is_rainy = weathercode in range(51, 100) or weathercode in [45, 48]
+        is_cold = temperature < 12
+        is_snowy = weathercode in range(71, 78)
+        is_hot = temperature > 30
+        
+        weather_data = {
+            "temperature": temperature,
+            "weathercode": weathercode,
+            "is_cold": is_cold,
+            "is_rainy": is_rainy,
+            "is_snowy": is_snowy,
+            "is_hot": is_hot,
+            "description": get_weather_description(weathercode, temperature)
+        }
+        
+        weather_cache[cache_key] = {"data": weather_data, "ts": time.time()}
+        return weather_data
+    except Exception as e:
+        logging.error(f"Weather API failed: {e}")
+        return {"temperature": 20, "weathercode": 0, "is_cold": False, "is_rainy": False, "is_snowy": False, "is_hot": False, "description": ""}
+
+def get_weather_description(weathercode: int, temperature: float) -> str:
+    """Convert WMO weather code to human description"""
+    if weathercode <= 3:
+        base = "clear skies" if weathercode <= 1 else "partly cloudy"
+    elif weathercode <= 48:
+        base = "foggy"
+    elif weathercode <= 57:
+        base = "light drizzle"
+    elif weathercode <= 67:
+        base = "rainy"
+    elif weathercode <= 77:
+        base = "snowy"
+    elif weathercode <= 82:
+        base = "rain showers"
+    else:
+        base = "stormy"
+    
+    if temperature < 0:
+        return f"Freezing & {base}"
+    elif temperature < 12:
+        return f"Chilly & {base}"
+    elif temperature > 30:
+        return f"Hot & {base}"
+    return base.capitalize()
 
 # Cache for comfort recommendations (stable unless history changes)
 comfort_cache = {}
 
+def generate_comfort_vibe_tag(watch_count: int, user_rating: int, hour: int, is_cold: bool, is_rainy: bool, is_snowy: bool, weather_description: str) -> str:
+    """Generate context-aware vibe tag for comfort movies"""
+    if watch_count >= 3:
+        return "Your go-to comfort classic"
+    if is_snowy:
+        return "Perfect for a snowy day indoors"
+    if is_rainy:
+        return "Ideal for a rainy day"
+    if is_cold:
+        return "Warm up with this favorite"
+    if user_rating >= 9:
+        return "A certified favorite"
+    if hour >= 22 or hour < 6:
+        return "Perfect for late night unwinding"
+    if hour >= 18:
+        return "Evening comfort pick"
+    return "Comfort food for your soul"
+
 @api_router.post("/movies/comfort")
 async def get_comfort_movies(request: ComfortRequest):
     """
-    Comfort Movies - Stable recommendations based on:
+    Comfort Movies - Context-aware recommendations based on:
     1. User's most re-watched and highest rated movies
     2. Time of day (later = user more tired, prefer lighter content)
-    3. Weather/climate conditions
+    3. Real weather/climate from user's location (Open-Meteo API)
     
-    Returns same 3 movies unless watch history changes.
+    Returns same 3 movies unless watch history or context changes.
     """
     global GENRE_MAP
     if not GENRE_MAP:
@@ -1222,23 +1318,40 @@ async def get_comfort_movies(request: ComfortRequest):
     
     user_id = user["id"]
     
+    # Fetch real weather if location provided
+    weather = None
+    is_cold = request.is_cold
+    is_rainy = request.is_rainy
+    is_snowy = False
+    weather_description = ""
+    temperature = None
+    
+    if request.latitude is not None and request.longitude is not None:
+        weather = fetch_weather(request.latitude, request.longitude)
+        is_cold = weather.get("is_cold", False)
+        is_rainy = weather.get("is_rainy", False)
+        is_snowy = weather.get("is_snowy", False)
+        temperature = weather.get("temperature")
+        weather_description = weather.get("description", "")
+    
     # Get watch history hash to detect changes
     watch_history = await db.watch_history.find(
         {"user_id": user_id},
         {"_id": 0}
     ).to_list(100)
     
-    # Create a hash of watch history to detect changes
+    # Create a hash of watch history + context to detect changes
+    context_key = f"{is_cold}_{is_rainy}_{is_snowy}_{request.hour // 6}"
     history_hash = hash(frozenset(
         (m.get("tmdb_id"), m.get("user_rating"), m.get("watch_count")) 
         for m in watch_history
     ))
     
-    # Check cache
-    cache_key = f"{user_id}_{request.hour // 6}"  # Cache by time period (6-hour blocks)
+    # Check cache (include weather context in key)
+    cache_key = f"{user_id}_{context_key}"
     cached = comfort_cache.get(cache_key)
     if cached and cached.get("history_hash") == history_hash:
-        return {"results": cached["movies"], "cached": True}
+        return {"results": cached["movies"], "cached": True, "weather": weather_description}
     
     # Calculate comfort scores for each watched movie
     comfort_movies = []
@@ -1248,7 +1361,6 @@ async def get_comfort_movies(request: ComfortRequest):
         watch_count = movie.get("watch_count", 1)
         
         # Base comfort score: combination of rating and rewatch count
-        # Rewatched movies are comfort movies
         comfort_score = (rating * 1.5) + (watch_count * 3)
         
         # Time of day adjustment
@@ -1260,9 +1372,12 @@ async def get_comfort_movies(request: ComfortRequest):
         elif request.hour >= 18:
             comfort_score *= 1.1  # Evening boost
         
-        # Weather adjustment
-        if request.is_cold or request.is_rainy:
-            comfort_score *= 1.2  # Cozy weather boost
+        # Weather-based adjustments
+        if is_cold or is_rainy or is_snowy:
+            comfort_score *= 1.25  # Cozy weather boost - perfect comfort movie weather
+        
+        if is_snowy:
+            comfort_score *= 1.1  # Extra snowy day bonus
         
         # Only consider movies rated 7+ as true comfort movies
         if rating >= 7:
@@ -1283,18 +1398,17 @@ async def get_comfort_movies(request: ComfortRequest):
         tmdb_id = movie.get("tmdb_id")
         details = tmdb_request(f"/movie/{tmdb_id}")
         
-        # Generate comfort-specific vibe tag
+        # Generate context-aware vibe tag
         watch_count = movie.get("watch_count", 1)
-        if watch_count >= 3:
-            vibe_tag = "Your go-to comfort classic"
-        elif movie.get("user_rating", 0) >= 9:
-            vibe_tag = "A certified favorite"
-        elif request.hour >= 22 or request.hour < 6:
-            vibe_tag = "Perfect for late night unwinding"
-        elif request.is_rainy:
-            vibe_tag = "Ideal for a rainy day"
-        else:
-            vibe_tag = "Comfort food for your soul"
+        vibe_tag = generate_comfort_vibe_tag(
+            watch_count=watch_count,
+            user_rating=movie.get("user_rating", 0),
+            hour=request.hour,
+            is_cold=is_cold,
+            is_rainy=is_rainy,
+            is_snowy=is_snowy,
+            weather_description=weather_description
+        )
         
         if details:
             enriched.append({
@@ -1347,7 +1461,7 @@ async def get_comfort_movies(request: ComfortRequest):
         "history_hash": history_hash
     }
     
-    return {"results": enriched[:3], "cached": False}
+    return {"results": enriched[:3], "cached": False, "weather": weather_description}
 
 @api_router.get("/movies/{movie_id}")
 async def get_movie_details(movie_id: int):

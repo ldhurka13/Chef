@@ -358,14 +358,16 @@ function AppContent() {
     setComfortLoading(true);
     
     try {
-      // Get current hour for time-based recommendations
       const hour = new Date().getHours();
       
-      const res = await axios.post(`${API}/movies/comfort`, {
-        hour: hour,
-        is_cold: false,  // Could be enhanced with weather API
-        is_rainy: false
-      });
+      // Build request with location if available
+      const comfortPayload = { hour };
+      if (userLocation) {
+        comfortPayload.latitude = userLocation.latitude;
+        comfortPayload.longitude = userLocation.longitude;
+      }
+      
+      const res = await axios.post(`${API}/movies/comfort`, comfortPayload);
       
       await new Promise(resolve => setTimeout(resolve, 300));
       setComfortMovies(res.data.results || []);
