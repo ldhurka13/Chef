@@ -266,10 +266,10 @@ function AppContent() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="font-serif text-2xl md:text-3xl text-center mb-2 text-flick-platinum">
-              Your Random Picks
+              The Hangry Hail Mary
             </h2>
             <p className="text-center text-flick-muted/60 text-sm mb-8">
-              Based on your taste
+              For when you don't care what it is, as long as it's hot
             </p>
             
             {/* Loading State */}
