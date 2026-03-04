@@ -1,0 +1,91 @@
+{
+  "summary": "Completed comprehensive testing of streaming availability integration (Movies of the Night API). Backend: All 17 tests passed covering streaming endpoint, allowed services filter, country codes, MongoDB caching, error handling, and movie detail integration. Frontend: Where to Watch section displays correctly with service name, type badge (Stream/Rent/Buy), colored dots, clickable links, and prices. 'No streaming options' fallback message works.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Backend: GET /api/movies/155/streaming?country=us returns streaming options for The Dark Knight (Max, Hulu, Prime)",
+    "Backend: GET /api/movies/238/streaming?country=us returns streaming options for The Godfather (Paramount+, Hulu)",
+    "Backend: Streaming options have required fields: service_id, service_name, service_color, type, link",
+    "Backend: Rent/buy options include price, price_amount, price_currency fields",
+    "Backend: Only allowed services returned (netflix, prime, disney, hulu, apple, hbo, paramount)",
+    "Backend: Service display names correct (hbo -> Max, prime -> Prime Video)",
+    "Backend: Country code US works correctly",
+    "Backend: Country code GB works with GBP pricing",
+    "Backend: Country code CA works correctly",
+    "Backend: Country codes normalized to lowercase",
+    "Backend: MongoDB caching works - second call returns cached=true",
+    "Backend: Cached results identical to fresh results",
+    "Backend: Invalid movie ID returns empty results (not 500 error)",
+    "Backend: Default country is 'us' when not specified",
+    "Backend: Movie detail endpoint returns all required fields (title, rating, runtime, genres, cast, similar)",
+    "Backend: Movie cast array has name and character fields",
+    "Backend: Movie similar array has id, title, poster_url fields",
+    "Frontend: Where to Watch section visible in MovieDetail modal (data-testid='where-to-watch')",
+    "Frontend: Streaming options show service name with colored dot indicator",
+    "Frontend: Streaming options show type badge (Stream/Free/Add-on/Rent/Buy)",
+    "Frontend: Streaming options are clickable links to streaming service",
+    "Frontend: Prices displayed for rent/buy options (e.g., '3.99 USD')",
+    "Frontend: 'No streaming options found for your region' displays when no streaming available",
+    "Frontend: Clicking similar movies loads streaming for new movie",
+    "Frontend: Movie detail modal shows title, rating, runtime, genres, overview correctly",
+    "Frontend: Cast section displays correctly",
+    "Frontend: Similar Movies section displays and is clickable"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_streaming.py",
+    "/app/test_reports/pytest/pytest_streaming_results.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "Streaming API integration is robust with proper 24hr MongoDB caching to conserve API calls",
+    "SERVICE_DISPLAY mapping correctly converts internal IDs to user-friendly names (hbo -> Max)",
+    "ALLOWED_SERVICES filter prevents unwanted services from appearing",
+    "getUserCountry() in frontend correctly extracts country from navigator.language",
+    "Error handling graceful - invalid TMDB IDs return empty arrays, not 500 errors"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_streaming.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (17/17 tests passed)",
+    "frontend": "100%"
+  },
+
+  "seed_data_creation": "Used existing movies: The Dark Knight (155), The Godfather (238), Scream VI - all have known streaming availability",
+
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Streaming availability integration is complete. Backend test file at /app/backend/tests/test_streaming.py covers all scenarios. API key has 1000 request limit so tests rely on MongoDB caching (collection: streaming_cache). Known test movies: The Dark Knight (155) has Max/Hulu/Prime in US, The Godfather (238) has Paramount+/Hulu in US. Country codes: us, gb, ca all tested. The 'Where to Watch' section uses data-testid='where-to-watch' and individual options use data-testid='streaming-{service_id}'.",
+
+  "streaming_integration_details": {
+    "api": "Movies of the Night (RapidAPI Streaming Availability)",
+    "cache_duration": "24 hours",
+    "allowed_services": ["netflix", "prime", "disney", "hulu", "apple", "hbo", "paramount"],
+    "service_display_names": {
+      "hbo": "Max",
+      "prime": "Prime Video",
+      "apple": "Apple TV+"
+    },
+    "streaming_types": ["subscription", "free", "addon", "rent", "buy"],
+    "data_testids": {
+      "section": "where-to-watch",
+      "options": "streaming-{service_id}"
+    }
+  }
+}

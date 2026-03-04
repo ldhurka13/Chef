@@ -1,19 +1,57 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Star, Clock, Calendar, Plus, Check, Play } from "lucide-react";
+import { X, Star, Clock, Calendar, Plus, Check, Play, Tv, ExternalLink } from "lucide-react";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
+// Get user's country code from browser locale
+const getUserCountry = () => {
+  try {
+    const parts = (navigator.language || "en-US").split("-");
+    if (parts.length >= 2) return parts[1].toLowerCase();
+  } catch {}
+  return "us";
+};
+
+const StreamingBadge = ({ type }) => {
+  const labels = {
+    subscription: "Stream",
+    free: "Free",
+    addon: "Add-on",
+    rent: "Rent",
+    buy: "Buy",
+  };
+  const colors = {
+    subscription: "bg-chef-teal/20 text-chef-teal border-chef-teal/30",
+    free: "bg-green-500/20 text-green-400 border-green-500/30",
+    addon: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+    rent: "bg-chef-gold/20 text-chef-gold border-chef-gold/30",
+    buy: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  };
+  return (
+    <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 border rounded-full ${colors[type] || colors.subscription}`}>
+      {labels[type] || type}
+    </span>
+  );
+};
+
+const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry }) => {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [userRating, setUserRating] = useState(7);
   const [showRatingInput, setShowRatingInput] = useState(false);
+  const [streamingOptions, setStreamingOptions] = useState([]);
+  const [streamingLoading, setStreamingLoading] = useState(false);
 
   useEffect(() => {
     if (open && movie?.id) {
       fetchDetails(movie.id);
+      fetchStreaming(movie.id);
+    }
+    if (!open) {
+      setStreamingOptions([]);
+      setShowRatingInput(false);
     }
   }, [open, movie]);
 
@@ -26,6 +64,20 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
       console.error("Failed to fetch movie details:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStreaming = async (movieId) => {
+    setStreamingLoading(true);
+    try {
+      const country = userCountry || getUserCountry();
+      const res = await axios.get(`${API}/movies/${movieId}/streaming?country=${country}`);
+      setStreamingOptions(res.data.results || []);
+    } catch (error) {
+      console.error("Failed to fetch streaming info:", error);
+      setStreamingOptions([]);
+    } finally {
+      setStreamingLoading(false);
     }
   };
 
@@ -243,6 +295,61 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                             </>
                           )}
                         </div>
+
+                        {/* Where to Watch */}
+                        <div className="mt-8" data-testid="where-to-watch">
+                          <div className="flex items-center gap-2 mb-4">
+                            <Tv className="w-4 h-4 text-chef-muted" strokeWidth={1.5} />
+                            <h3 className="font-serif text-lg text-chef-platinum">Where to Watch</h3>
+                          </div>
+                          
+                          {streamingLoading ? (
+                            <div className="flex gap-3">
+                              {[0, 1, 2].map((i) => (
+                                <div key={i} className="h-14 w-36 rounded-lg skeleton" />
+                              ))}
+                            </div>
+                          ) : streamingOptions.length > 0 ? (
+                            <div className="flex flex-wrap gap-3">
+                              {streamingOptions.map((opt, idx) => (
+                                <a
+                                  key={idx}
+                                  href={opt.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-3 px-4 py-3 rounded-lg
+                                           bg-chef-bg/80 border border-white/5
+                                           hover:border-white/20 hover:bg-chef-bg
+                                           transition-all duration-200 group"
+                                  data-testid={`streaming-${opt.service_id}`}
+                                >
+                                  <div
+                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: opt.service_color }}
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm text-chef-platinum font-medium">
+                                        {opt.service_name}
+                                      </span>
+                                      <ExternalLink className="w-3 h-3 text-chef-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <StreamingBadge type={opt.type} />
+                                      {opt.price && (
+                                        <span className="text-xs text-chef-muted">{opt.price}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-chef-muted/60">
+                              No streaming options found for your region
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -283,7 +390,10 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory }) => {
                             <div 
                               key={idx} 
                               className="flex-shrink-0 w-28 cursor-pointer group"
-                              onClick={() => fetchDetails(similar.id)}
+                              onClick={() => {
+                                fetchDetails(similar.id);
+                                fetchStreaming(similar.id);
+                              }}
                             >
                               {similar.poster_url ? (
                                 <img
