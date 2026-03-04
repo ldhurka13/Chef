@@ -23,6 +23,7 @@ import ProfileModal from "./components/ProfileModal";
 import LocationPermissionModal from "./components/LocationPermissionModal";
 import UserDetails from "./components/UserDetails";
 import ResetPassword from "./components/ResetPassword";
+import WatchHistoryPage from "./components/WatchHistoryPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -531,17 +532,7 @@ function AppContent() {
             <Route
               path="/history"
               element={
-                <main className="pb-24 pt-8">
-                  <section className="px-4 md:px-8 max-w-7xl mx-auto">
-                    <h1 className="font-serif text-3xl md:text-4xl tracking-tight mb-8">
-                      Your Watch History
-                    </h1>
-                    <SafetyNet 
-                      movies={watchHistory}
-                      onMovieClick={handleMovieClick}
-                    />
-                  </section>
-                </main>
+                <WatchHistoryPage user={authUser} />
               }
             />
             <Route
