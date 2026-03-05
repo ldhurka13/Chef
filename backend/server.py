@@ -865,18 +865,24 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
     # --- Helper: search TMDB for a movie by name + year ---
     tmdb_api_key = os.environ.get("TMDB_API_KEY", "")
     tmdb_cache = {}
+    tmdb_semaphore = asyncio.Semaphore(15)
+    tmdb_client = httpx.AsyncClient(timeout=10)
     
     async def search_tmdb_movie(title: str, year: int = None) -> dict:
         cache_key = f"{title}|{year or ''}"
         if cache_key in tmdb_cache:
             return tmdb_cache[cache_key]
         
-        params = {"api_key": tmdb_api_key, "query": title}
-        if year:
-            params["year"] = year
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get("https://api.themoviedb.org/3/search/movie", params=params, timeout=10)
+        async with tmdb_semaphore:
+            # Re-check after acquiring semaphore (another task may have cached it)
+            if cache_key in tmdb_cache:
+                return tmdb_cache[cache_key]
+            
+            params = {"api_key": tmdb_api_key, "query": title}
+            if year:
+                params["year"] = year
+            try:
+                resp = await tmdb_client.get("https://api.themoviedb.org/3/search/movie", params=params)
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
                     if results:
@@ -890,15 +896,46 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
                         }
                         tmdb_cache[cache_key] = result
                         return result
-        except Exception:
-            pass
-        tmdb_cache[cache_key] = None
-        return None
+                elif resp.status_code == 429:
+                    await asyncio.sleep(1)
+                    return await search_tmdb_movie(title, year)
+            except Exception:
+                pass
+            tmdb_cache[cache_key] = None
+            return None
     
     # --- Process ZIP data ---
     stats = {"diary_added": 0, "diary_updated": 0, "watchlist_added": 0, "skipped": 0, "total_processed": 0}
     
     if is_zip:
+        # Pre-fetch all unique movies from TMDB in parallel
+        unique_movies = {}
+        for row in ratings_rows:
+            name = (row.get("Name") or "").strip()
+            year_str = (row.get("Year") or "").strip()
+            if name:
+                year_val = int(year_str) if year_str.isdigit() else None
+                unique_movies[f"{name}|{year_val or ''}"] = (name, year_val)
+        for row in reviews_rows:
+            name = (row.get("Name") or "").strip()
+            year_str = (row.get("Year") or "").strip()
+            if name:
+                year_val = int(year_str) if year_str.isdigit() else None
+                unique_movies[f"{name}|{year_val or ''}"] = (name, year_val)
+        for row in watchlist_rows:
+            name = (row.get("Name") or "").strip()
+            year_str = (row.get("Year") or "").strip()
+            if name:
+                year_val = int(year_str) if year_str.isdigit() else None
+                unique_movies[f"{name}|{year_val or ''}"] = (name, year_val)
+        
+        # Batch TMDB lookups concurrently
+        if unique_movies:
+            await asyncio.gather(*[
+                search_tmdb_movie(title, year)
+                for title, year in unique_movies.values()
+            ])
+        
         # Build review lookup: (name, year) -> review text
         review_map = {}
         for row in reviews_rows:
@@ -1114,6 +1151,8 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
                 "letterboxd_count": stats["diary_added"] + stats["diary_updated"] + stats["watchlist_added"]
             }}
         )
+        
+        await tmdb_client.aclose()
         
         return {
             "message": f"Letterboxd import complete: {stats['diary_added']} diary entries, {stats['watchlist_added']} watchlist items",

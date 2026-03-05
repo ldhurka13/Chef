@@ -112,7 +112,12 @@ const UserDetails = ({ user, onUserUpdate }) => {
         fetchLetterboxdData();
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Import failed");
+      if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+        toast.info("Import is still processing. Your movies will appear shortly — refresh the page in a moment.");
+        setTimeout(() => fetchLetterboxdData(), 5000);
+      } else {
+        toast.error(err.response?.data?.detail || "Import failed");
+      }
     } finally {
       setCsvUploading(false);
       if (csvInputRef.current) csvInputRef.current.value = "";
