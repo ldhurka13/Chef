@@ -64,6 +64,9 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - `POST /api/user/watch-history` - Add to diary
 - `PUT /api/user/watch-history/{tmdb_id}` - Update diary entry
 - `DELETE /api/user/watch-history/{tmdb_id}` - Remove from diary
+- `POST /api/user/watch-history/{tmdb_id}/watches` - Add a watch entry
+- `PUT /api/user/watch-history/{tmdb_id}/watches/{watch_id}` - Edit a watch
+- `DELETE /api/user/watch-history/{tmdb_id}/watches/{watch_id}` - Delete a watch
 - `GET /api/user/watchlist` - Get user's watchlist
 - `POST /api/user/watchlist` - Add to watchlist
 - `DELETE /api/user/watchlist/{tmdb_id}` - Remove from watchlist
@@ -80,7 +83,7 @@ Build a context-aware movie recommendation engine called "Chef" with:
 
 ## DB Schema (MongoDB)
 - **auth_users**: {id, email, username, password_hash, birth_year, birth_date, avatar_url, favorite_genres, favorite_actors, favorite_movies, favorite_directors, streaming_services, location_permission, location, gender, bio, letterboxd_connected, letterboxd_count, created_at}
-- **watch_history**: {id, user_id, tmdb_id, user_rating, watch_dates[], last_watched_date, watch_count, title, poster_path}
+- **watch_history**: {id, user_id, tmdb_id, user_rating, watch_dates[], last_watched_date, watch_count, title, poster_path, watches: [{id, rating, date, comment}]}
 - **watchlist**: {id, user_id, tmdb_id, title, poster_path, release_date, vote_average, genres[], added_at}
 - **letterboxd_imports**: {user_id, entries, total_movies, rated_movies, imported_at, filename}
 - **streaming_cache**: {tmdb_id, country, options, cached_at}
@@ -102,6 +105,10 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] User Details page (Photo, Gender, Bio, Streaming Services, Letterboxd)
 - [x] **My Movies page with 3 tabs:**
   - [x] **Diary** - Watch history with search, add, rate (0-10 w/ 0.1 increments), date tracking, remove
+    - [x] **Diary Detail Modal** - Click any diary movie to open detailed watch history
+    - [x] Multiple watches per movie (each with rating, date, comment)
+    - [x] "First Watch" / "Re-watch #N" labels, descending order (latest first)
+    - [x] Inline edit & delete per watch; deleting last watch removes movie from diary
   - [x] **Watchlist** - Search & add movies to watch later, remove from watchlist
   - [x] **Profile** - Favorite Genres, Favorite Actors, Favorite Directors, Top 5 Favorite Movies
 - [x] Add to Watchlist button in movie detail modal (toggle on/off)
