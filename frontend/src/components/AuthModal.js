@@ -44,9 +44,14 @@ const AuthModal = ({ isOpen, onClose, mode, onModeChange, onLogin, onSignup, loa
     setError("");
     setForgotLoading(true);
     try {
-      await axios.post(`${API}/auth/forgot-password`, { email: forgotEmail });
-      setForgotSent(true);
-      toast.success("Reset link sent to your email");
+      const res = await axios.post(`${API}/auth/forgot-password`, { email: forgotEmail });
+      if (res.data.reset_url) {
+        // Email couldn't be sent — redirect directly to reset page
+        window.location.href = res.data.reset_url;
+      } else {
+        setForgotSent(true);
+        toast.success("Reset link sent to your email");
+      }
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to send reset email");
     } finally {

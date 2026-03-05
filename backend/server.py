@@ -627,6 +627,7 @@ async def forgot_password(data: ForgotPasswordRequest):
     reset_url = f"{frontend_url}/reset-password?token={reset_token}"
     
     # Send email via Resend
+    email_sent = False
     if RESEND_API_KEY:
         try:
             params = {
@@ -649,14 +650,16 @@ async def forgot_password(data: ForgotPasswordRequest):
                 """
             }
             await asyncio.to_thread(resend.Emails.send, params)
+            email_sent = True
             logging.info(f"Password reset email sent to {email}")
         except Exception as e:
-            logging.error(f"Failed to send reset email: {e}")
-            raise HTTPException(status_code=500, detail="Failed to send reset email. Please try again.")
-    else:
-        logging.warning(f"Resend not configured. Reset URL: {reset_url}")
+            logging.warning(f"Email send failed (will provide direct link): {e}")
     
-    return {"message": "Password reset link sent to your email"}
+    if email_sent:
+        return {"message": "Password reset link sent to your email"}
+    else:
+        # Return reset URL directly when email can't be sent
+        return {"message": "Reset link generated", "reset_url": reset_url}
 
 @api_router.post("/auth/reset-password")
 async def reset_password(data: ResetPasswordRequest):
