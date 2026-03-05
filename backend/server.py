@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import requests
+import httpx
 import time
 import json
 import hashlib
@@ -782,118 +783,369 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
 
 @api_router.post("/auth/import-letterboxd")
 async def import_letterboxd(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    """Import Letterboxd CSV data"""
+    """Import Letterboxd data from CSV or ZIP file, populating diary and watchlist"""
+    import csv
+    import io
+    import zipfile
+    
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are accepted")
+    is_zip = file.filename.endswith(".zip")
+    is_csv = file.filename.endswith(".csv")
+    if not is_zip and not is_csv:
+        raise HTTPException(status_code=400, detail="Only .csv or .zip files are accepted")
     
     contents = await file.read()
-    if len(contents) > 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File size must be under 1MB")
+    max_size = 10 * 1024 * 1024 if is_zip else 1024 * 1024
+    if len(contents) > max_size:
+        raise HTTPException(status_code=400, detail=f"File size must be under {'10MB' if is_zip else '1MB'}")
     
-    try:
-        text = contents.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = contents.decode("latin-1")
+    ratings_rows = []
+    reviews_rows = []
+    watchlist_rows = []
+    legacy_entries = []
     
-    import csv
-    import io
+    def parse_csv_text(text):
+        try:
+            decoded = text.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            decoded = text.decode("latin-1")
+        return list(csv.DictReader(io.StringIO(decoded)))
     
-    reader = csv.DictReader(io.StringIO(text))
-    entries = []
-    
-    for row in reader:
-        entry = {}
-        # Core fields from Letterboxd format
-        if row.get("Title"):
-            entry["title"] = row["Title"].strip()
-        elif row.get("Name"):
-            entry["title"] = row["Name"].strip()
-        else:
-            continue
+    if is_zip:
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(contents))
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Invalid zip file")
         
-        if row.get("Year"):
+        for name in zf.namelist():
+            basename = name.split("/")[-1].lower()
+            # Only process root-level CSVs (not in deleted/orphaned subfolders)
+            parts = [p for p in name.split("/") if p]
+            is_root_csv = len(parts) == 1 or (len(parts) == 2 and parts[0].lower() not in ("deleted", "orphaned", "likes"))
+            
+            if basename == "ratings.csv" and is_root_csv:
+                ratings_rows = parse_csv_text(zf.read(name))
+            elif basename == "reviews.csv" and is_root_csv:
+                reviews_rows = parse_csv_text(zf.read(name))
+            elif basename == "watchlist.csv" and is_root_csv:
+                watchlist_rows = parse_csv_text(zf.read(name))
+        
+        zf.close()
+    else:
+        # Legacy single CSV import
+        rows = parse_csv_text(contents)
+        for row in rows:
+            entry = {}
+            title = (row.get("Title") or row.get("Name") or "").strip()
+            if not title:
+                continue
+            entry["title"] = title
+            if row.get("Year"):
+                try:
+                    entry["year"] = int(row["Year"])
+                except (ValueError, TypeError):
+                    pass
+            if row.get("Rating"):
+                try:
+                    r5 = float(row["Rating"])
+                    entry["rating_5"] = r5
+                    entry["rating_10"] = round(r5 * 2, 1)
+                except (ValueError, TypeError):
+                    pass
+            if row.get("WatchedDate"):
+                entry["watched_date"] = row["WatchedDate"].strip()
+            if row.get("Review"):
+                entry["review"] = row["Review"].strip()[:500]
+            if row.get("LetterboxdURI") or row.get("Letterboxd URI"):
+                entry["letterboxd_uri"] = (row.get("LetterboxdURI") or row.get("Letterboxd URI") or "").strip()
+            legacy_entries.append(entry)
+    
+    # --- Helper: search TMDB for a movie by name + year ---
+    tmdb_api_key = os.environ.get("TMDB_API_KEY", "")
+    tmdb_cache = {}
+    
+    async def search_tmdb_movie(title: str, year: int = None) -> dict:
+        cache_key = f"{title}|{year or ''}"
+        if cache_key in tmdb_cache:
+            return tmdb_cache[cache_key]
+        
+        params = {"api_key": tmdb_api_key, "query": title}
+        if year:
+            params["year"] = year
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get("https://api.themoviedb.org/3/search/movie", params=params, timeout=10)
+                if resp.status_code == 200:
+                    results = resp.json().get("results", [])
+                    if results:
+                        m = results[0]
+                        result = {
+                            "tmdb_id": m["id"],
+                            "title": m.get("title", title),
+                            "poster_path": m.get("poster_path"),
+                            "release_date": m.get("release_date", ""),
+                            "vote_average": m.get("vote_average", 0),
+                        }
+                        tmdb_cache[cache_key] = result
+                        return result
+        except Exception:
+            pass
+        tmdb_cache[cache_key] = None
+        return None
+    
+    # --- Process ZIP data ---
+    stats = {"diary_added": 0, "diary_updated": 0, "watchlist_added": 0, "skipped": 0, "total_processed": 0}
+    
+    if is_zip:
+        # Build review lookup: (name, year) -> review text
+        review_map = {}
+        for row in reviews_rows:
+            name = (row.get("Name") or "").strip()
+            year_str = (row.get("Year") or "").strip()
+            review_text = (row.get("Review") or "").strip()[:500]
+            if name and review_text:
+                year_val = int(year_str) if year_str.isdigit() else None
+                review_map[(name.lower(), year_val)] = review_text
+        
+        # Process ratings.csv → Diary entries
+        for row in ratings_rows:
+            name = (row.get("Name") or "").strip()
+            year_str = (row.get("Year") or "").strip()
+            rating_str = (row.get("Rating") or "").strip()
+            date_str = (row.get("Date") or "").strip()
+            if not name:
+                continue
+            
+            stats["total_processed"] += 1
+            year_val = int(year_str) if year_str.isdigit() else None
+            
+            # Convert 0-5 rating to 0-10
             try:
-                entry["year"] = int(row["Year"])
-            except (ValueError, TypeError):
-                pass
+                rating_10 = round(float(rating_str) * 2, 1) if rating_str else 7.0
+            except ValueError:
+                rating_10 = 7.0
+            
+            # Look up review
+            comment = review_map.get((name.lower(), year_val), "")
+            
+            # Search TMDB
+            tmdb = await search_tmdb_movie(name, year_val)
+            if not tmdb:
+                stats["skipped"] += 1
+                continue
+            
+            # Check if already in diary
+            existing = await db.watch_history.find_one(
+                {"user_id": current_user["id"], "tmdb_id": tmdb["tmdb_id"]},
+                {"_id": 0}
+            )
+            
+            watch_entry = {
+                "id": str(uuid.uuid4()),
+                "rating": rating_10,
+                "date": date_str or "",
+                "comment": comment,
+                "source": "letterboxd"
+            }
+            
+            if existing:
+                # Add as a new watch only if not already imported from letterboxd
+                has_lb = any(w.get("source") == "letterboxd" for w in existing.get("watches", []))
+                if not has_lb:
+                    watches = existing.get("watches", [])
+                    watches.append(watch_entry)
+                    summary = _sync_watch_summary(watches)
+                    await db.watch_history.update_one(
+                        {"user_id": current_user["id"], "tmdb_id": tmdb["tmdb_id"]},
+                        {"$set": {"watches": watches, **summary}}
+                    )
+                    stats["diary_updated"] += 1
+                else:
+                    stats["skipped"] += 1
+            else:
+                doc = {
+                    "id": str(uuid.uuid4()),
+                    "user_id": current_user["id"],
+                    "tmdb_id": tmdb["tmdb_id"],
+                    "user_rating": rating_10,
+                    "watch_dates": [date_str] if date_str else [],
+                    "last_watched_date": date_str or "",
+                    "watch_count": 1,
+                    "watches": [watch_entry],
+                    "title": tmdb["title"],
+                    "poster_path": tmdb["poster_path"],
+                    "source": "letterboxd"
+                }
+                await db.watch_history.insert_one(doc)
+                stats["diary_added"] += 1
         
-        # Rating (Letterboxd uses 0.5-5 scale)
-        if row.get("Rating"):
+        # Process reviews that DON'T have a rating (not already covered)
+        rated_keys = set()
+        for row in ratings_rows:
+            n = (row.get("Name") or "").strip().lower()
+            y = int(row["Year"]) if (row.get("Year") or "").strip().isdigit() else None
+            if n:
+                rated_keys.add((n, y))
+        
+        for row in reviews_rows:
+            name = (row.get("Name") or "").strip()
+            year_str = (row.get("Year") or "").strip()
+            rating_str = (row.get("Rating") or "").strip()
+            review_text = (row.get("Review") or "").strip()[:500]
+            date_str = (row.get("Date") or "").strip()
+            if not name:
+                continue
+            
+            year_val = int(year_str) if year_str.isdigit() else None
+            if (name.lower(), year_val) in rated_keys:
+                continue  # Already processed with rating
+            
+            stats["total_processed"] += 1
             try:
-                rating_5 = float(row["Rating"])
-                entry["rating_5"] = rating_5
-                entry["rating_10"] = int(rating_5 * 2)
-            except (ValueError, TypeError):
-                pass
+                rating_10 = round(float(rating_str) * 2, 1) if rating_str else 7.0
+            except ValueError:
+                rating_10 = 7.0
+            
+            tmdb = await search_tmdb_movie(name, year_val)
+            if not tmdb:
+                stats["skipped"] += 1
+                continue
+            
+            existing = await db.watch_history.find_one(
+                {"user_id": current_user["id"], "tmdb_id": tmdb["tmdb_id"]},
+                {"_id": 0}
+            )
+            
+            watch_entry = {
+                "id": str(uuid.uuid4()),
+                "rating": rating_10,
+                "date": date_str or "",
+                "comment": review_text,
+                "source": "letterboxd"
+            }
+            
+            if existing:
+                has_lb = any(w.get("source") == "letterboxd" for w in existing.get("watches", []))
+                if not has_lb:
+                    watches = existing.get("watches", [])
+                    watches.append(watch_entry)
+                    summary = _sync_watch_summary(watches)
+                    await db.watch_history.update_one(
+                        {"user_id": current_user["id"], "tmdb_id": tmdb["tmdb_id"]},
+                        {"$set": {"watches": watches, **summary}}
+                    )
+                    stats["diary_updated"] += 1
+            else:
+                doc = {
+                    "id": str(uuid.uuid4()),
+                    "user_id": current_user["id"],
+                    "tmdb_id": tmdb["tmdb_id"],
+                    "user_rating": rating_10,
+                    "watch_dates": [date_str] if date_str else [],
+                    "last_watched_date": date_str or "",
+                    "watch_count": 1,
+                    "watches": [watch_entry],
+                    "title": tmdb["title"],
+                    "poster_path": tmdb["poster_path"],
+                    "source": "letterboxd"
+                }
+                await db.watch_history.insert_one(doc)
+                stats["diary_added"] += 1
         
-        # Rating10 (1-10 scale)
-        if row.get("Rating10"):
-            try:
-                entry["rating_10"] = int(row["Rating10"])
-                entry["rating_5"] = float(row["Rating10"]) / 2
-            except (ValueError, TypeError):
-                pass
+        # Process watchlist.csv → Watchlist
+        for row in watchlist_rows:
+            name = (row.get("Name") or "").strip()
+            year_str = (row.get("Year") or "").strip()
+            date_str = (row.get("Date") or "").strip()
+            if not name:
+                continue
+            
+            stats["total_processed"] += 1
+            year_val = int(year_str) if year_str.isdigit() else None
+            
+            tmdb = await search_tmdb_movie(name, year_val)
+            if not tmdb:
+                stats["skipped"] += 1
+                continue
+            
+            existing_wl = await db.watchlist.find_one(
+                {"user_id": current_user["id"], "tmdb_id": tmdb["tmdb_id"]}
+            )
+            if existing_wl:
+                stats["skipped"] += 1
+                continue
+            
+            wl_doc = {
+                "id": str(uuid.uuid4()),
+                "user_id": current_user["id"],
+                "tmdb_id": tmdb["tmdb_id"],
+                "title": tmdb["title"],
+                "poster_path": tmdb["poster_path"],
+                "release_date": tmdb.get("release_date", ""),
+                "vote_average": tmdb.get("vote_average"),
+                "genres": [],
+                "added_at": datetime.now(timezone.utc).isoformat(),
+                "source": "letterboxd"
+            }
+            await db.watchlist.insert_one(wl_doc)
+            stats["watchlist_added"] += 1
         
-        if row.get("WatchedDate"):
-            entry["watched_date"] = row["WatchedDate"].strip()
+        # Store import summary
+        import_doc = {
+            "user_id": current_user["id"],
+            "ratings_count": len(ratings_rows),
+            "reviews_count": len(reviews_rows),
+            "watchlist_count": len(watchlist_rows),
+            "stats": stats,
+            "imported_at": datetime.now(timezone.utc).isoformat(),
+            "filename": file.filename
+        }
+        await db.letterboxd_imports.update_one(
+            {"user_id": current_user["id"]},
+            {"$set": import_doc},
+            upsert=True
+        )
+        await db.auth_users.update_one(
+            {"id": current_user["id"]},
+            {"$set": {
+                "letterboxd_connected": True,
+                "letterboxd_count": stats["diary_added"] + stats["diary_updated"] + stats["watchlist_added"]
+            }}
+        )
         
-        if row.get("Rewatch"):
-            entry["rewatch"] = row["Rewatch"].strip().lower() == "true"
-        
-        if row.get("Tags"):
-            entry["tags"] = [t.strip() for t in row["Tags"].split(",")]
-        
-        if row.get("Review"):
-            entry["review"] = row["Review"].strip()[:500]
-        
-        if row.get("tmdbID"):
-            try:
-                entry["tmdb_id"] = int(row["tmdbID"])
-            except (ValueError, TypeError):
-                pass
-        
-        if row.get("imdbID"):
-            entry["imdb_id"] = row["imdbID"].strip()
-        
-        if row.get("LetterboxdURI") or row.get("url"):
-            entry["letterboxd_uri"] = (row.get("LetterboxdURI") or row.get("url", "")).strip()
-        
-        entries.append(entry)
+        return {
+            "message": f"Letterboxd import complete: {stats['diary_added']} diary entries, {stats['watchlist_added']} watchlist items",
+            "stats": stats
+        }
     
-    if not entries:
+    # --- Legacy CSV import (no diary/watchlist population) ---
+    if not legacy_entries:
         raise HTTPException(status_code=400, detail="No valid entries found in CSV")
     
-    # Store in MongoDB
     import_doc = {
         "user_id": current_user["id"],
-        "entries": entries,
-        "total_movies": len(entries),
-        "rated_movies": sum(1 for e in entries if e.get("rating_5") or e.get("rating_10")),
+        "entries": legacy_entries,
+        "total_movies": len(legacy_entries),
+        "rated_movies": sum(1 for e in legacy_entries if e.get("rating_5") or e.get("rating_10")),
         "imported_at": datetime.now(timezone.utc).isoformat(),
         "filename": file.filename
     }
-    
-    # Upsert — replace previous import for this user
     await db.letterboxd_imports.update_one(
         {"user_id": current_user["id"]},
         {"$set": import_doc},
         upsert=True
     )
-    
-    # Update user flag
     await db.auth_users.update_one(
         {"id": current_user["id"]},
-        {"$set": {"letterboxd_connected": True, "letterboxd_count": len(entries)}}
+        {"$set": {"letterboxd_connected": True, "letterboxd_count": len(legacy_entries)}}
     )
     
     return {
-        "message": f"Successfully imported {len(entries)} movies from Letterboxd",
-        "total": len(entries),
-        "rated": sum(1 for e in entries if e.get("rating_5") or e.get("rating_10")),
-        "sample": entries[:3]
+        "message": f"Successfully imported {len(legacy_entries)} movies from Letterboxd",
+        "total": len(legacy_entries),
+        "rated": sum(1 for e in legacy_entries if e.get("rating_5") or e.get("rating_10")),
     }
 
 @api_router.get("/auth/letterboxd-data")

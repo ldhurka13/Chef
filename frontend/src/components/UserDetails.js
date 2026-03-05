@@ -99,13 +99,23 @@ const UserDetails = ({ user, onUserUpdate }) => {
     try {
       const res = await axios.post(`${API}/auth/import-letterboxd`, formData, {
         headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
+        timeout: 120000,
       });
       toast.success(res.data.message);
-      fetchLetterboxdData();
+      if (res.data.stats) {
+        setLetterboxdData({
+          connected: true,
+          stats: res.data.stats,
+          imported_at: new Date().toISOString(),
+        });
+      } else {
+        fetchLetterboxdData();
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || "Import failed");
     } finally {
       setCsvUploading(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
     }
   };
 
@@ -299,10 +309,19 @@ const UserDetails = ({ user, onUserUpdate }) => {
                 </div>
                 <div>
                   <p className="text-sm text-chef-platinum font-medium">Letterboxd Connected</p>
-                  <p className="text-xs text-chef-muted">
-                    {letterboxdData.total_movies} movies imported
-                    {letterboxdData.rated_movies > 0 && ` / ${letterboxdData.rated_movies} rated`}
-                  </p>
+                  {letterboxdData.stats ? (
+                    <p className="text-xs text-chef-muted">
+                      {letterboxdData.stats.diary_added > 0 && `${letterboxdData.stats.diary_added} diary entries`}
+                      {letterboxdData.stats.diary_updated > 0 && ` + ${letterboxdData.stats.diary_updated} updated`}
+                      {letterboxdData.stats.watchlist_added > 0 && ` / ${letterboxdData.stats.watchlist_added} watchlist items`}
+                      {letterboxdData.stats.skipped > 0 && ` (${letterboxdData.stats.skipped} skipped)`}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-chef-muted">
+                      {letterboxdData.total_movies} movies imported
+                      {letterboxdData.rated_movies > 0 && ` / ${letterboxdData.rated_movies} rated`}
+                    </p>
+                  )}
                 </div>
               </div>
               <button
@@ -310,7 +329,7 @@ const UserDetails = ({ user, onUserUpdate }) => {
                 className="text-xs text-chef-teal hover:text-chef-teal/80 transition-colors"
                 data-testid="reimport-letterboxd-btn"
               >
-                Re-import CSV
+                Re-import
               </button>
             </div>
           ) : (
@@ -323,24 +342,30 @@ const UserDetails = ({ user, onUserUpdate }) => {
               data-testid="letterboxd-dropzone"
             >
               {csvUploading ? (
-                <Loader2 className="w-8 h-8 text-chef-teal animate-spin" />
+                <>
+                  <Loader2 className="w-8 h-8 text-chef-teal animate-spin" />
+                  <p className="text-sm text-chef-teal">Importing &mdash; this may take a minute...</p>
+                </>
               ) : (
-                <Upload className="w-8 h-8 text-chef-muted/40" />
+                <>
+                  <Upload className="w-8 h-8 text-chef-muted/40" />
+                  <div className="text-center">
+                    <p className="text-sm text-chef-platinum">Upload your Letterboxd export</p>
+                    <p className="text-xs text-chef-muted/50 mt-1">
+                      ZIP or CSV &mdash; Go to Letterboxd Settings &gt; Import &amp; Export &gt; Export Your Data
+                    </p>
+                    <p className="text-xs text-chef-muted/30 mt-0.5">
+                      Ratings &amp; reviews go to Diary, watchlist goes to Watchlist
+                    </p>
+                  </div>
+                </>
               )}
-              <div className="text-center">
-                <p className="text-sm text-chef-platinum">
-                  {csvUploading ? "Importing..." : "Upload your Letterboxd CSV"}
-                </p>
-                <p className="text-xs text-chef-muted/50 mt-1">
-                  Export from Letterboxd Settings &gt; Import & Export &gt; Export Your Data
-                </p>
-              </div>
             </div>
           )}
           <input
             ref={csvInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv,.zip"
             className="hidden"
             onChange={handleCsvUpload}
             data-testid="letterboxd-file-input"

@@ -319,6 +319,9 @@ const DiaryDetailModal = ({ movie, onClose, onMovieUpdated, onMovieRemoved }) =>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs text-chef-muted uppercase tracking-wider flex items-center gap-1.5">
                             {isRewatch && <RotateCcw className="w-3 h-3" />} {label}
+                            {w.source === "letterboxd" && (
+                              <span className="text-[9px] px-1 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 font-medium ml-1">LB</span>
+                            )}
                           </span>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
@@ -593,6 +596,9 @@ const DiaryTab = () => {
                   {item.watch_count > 1 && (
                     <span className="text-xs text-chef-muted/60">{item.watch_count}x</span>
                   )}
+                  {item.source === "letterboxd" && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 uppercase tracking-wider font-medium">LB</span>
+                  )}
                 </div>
               </div>
               <button
@@ -784,6 +790,9 @@ const WatchlistTab = () => {
                   )}
                   {item.genres && item.genres.length > 0 && (
                     <span className="text-xs text-chef-muted/60">{item.genres.slice(0, 2).join(", ")}</span>
+                  )}
+                  {item.source === "letterboxd" && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 uppercase tracking-wider font-medium">LB</span>
                   )}
                 </div>
               </div>

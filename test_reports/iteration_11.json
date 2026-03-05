@@ -1,0 +1,71 @@
+{
+  "summary": "Completed full E2E testing of Letterboxd ZIP import feature. All 16 backend tests passed (100%) and all frontend features verified working: ZIP/CSV file upload, rating conversion (5→10), reviews as comments, watchlist import, source='letterboxd' field, LB badges on diary/watchlist/modal, and idempotent re-import.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Backend: POST /api/auth/import-letterboxd accepts .zip files",
+    "Backend: POST /api/auth/import-letterboxd still accepts .csv files (legacy)",
+    "Backend: Zip import parses ratings.csv and creates diary entries",
+    "Backend: 5-star Letterboxd ratings converted to 10-point scale (×2)",
+    "Backend: Reviews from reviews.csv merged as comments on diary entries",
+    "Backend: Watchlist.csv processed into watchlist entries",
+    "Backend: All imported diary entries have source='letterboxd'",
+    "Backend: All imported watchlist entries have source='letterboxd'",
+    "Backend: Re-import is idempotent - skips already imported items",
+    "Backend: Import returns detailed stats (diary_added, watchlist_added, skipped)",
+    "Backend: Invalid file types (.txt) rejected with 400",
+    "Backend: Import requires authentication (401 without token)",
+    "Backend: GET /api/user/watch-history returns source field on letterboxd entries",
+    "Backend: GET /api/user/watchlist returns source field on letterboxd entries",
+    "Backend: GET /api/auth/letterboxd-data returns connected=false for new user",
+    "Backend: GET /api/auth/letterboxd-data returns connected=true after import",
+    "Frontend: UserDetails Letterboxd section accepts both .zip and .csv (accept='.csv,.zip')",
+    "Frontend: Import shows stats in connected state (e.g., '4 diary entries / 2 watchlist items')",
+    "Frontend: Diary tab shows orange 'LB' badge on letterboxd-imported items",
+    "Frontend: Watchlist tab shows orange 'LB' badge on letterboxd-imported items",
+    "Frontend: Diary detail modal shows 'LB' badge on letterboxd watch entries"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_letterboxd_import.py",
+    "/app/test_reports/pytest/pytest_letterboxd_import.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "Backend ZIP parsing correctly handles root-level CSVs only (ignores deleted/orphaned/likes subfolders)",
+    "Rating conversion: Letterboxd 0-5 scale → 0-10 scale via round(rating * 2, 1)",
+    "Review lookup uses (name.lower(), year) tuple for efficient matching",
+    "Idempotency implemented by checking source='letterboxd' in existing watches array",
+    "Frontend file input correctly accepts '.csv,.zip' via accept attribute",
+    "LB badge styled as orange pill: bg-orange-500/10 border-orange-500/20 text-orange-400",
+    "Import stats displayed: diary_added, diary_updated, watchlist_added, skipped counts"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_letterboxd_import.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (16/16 tests passed)",
+    "frontend": "100% (all 5 features verified)"
+  },
+
+  "test_credentials": "Unique test users created per test run with timestamp-based emails",
+  "seed_data_creation": "Test ZIP file at /tmp/letterboxd_test.zip with ratings.csv (Fight Club 4.5, Parasite 5, Whiplash 5), reviews.csv (Fight Club, Moonlight reviews), watchlist.csv (Eternal Sunshine, Godfather)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Letterboxd ZIP import fully tested. Test ZIP at /tmp/letterboxd_test.zip. Backend endpoint: POST /api/auth/import-letterboxd accepts multipart file upload (.zip or .csv). ZIP must contain ratings.csv, reviews.csv, watchlist.csv at root level. Ratings populate diary with 5→10 conversion. Reviews merge as comments. Watchlist items added. All imported items get source='letterboxd'. Frontend shows 'LB' badge (orange pill) on imported items in DiaryTab, WatchlistTab, and DiaryDetailModal. Connected state shows stats like '4 diary entries / 2 watchlist items'. Re-import button available for update imports. Routes: /details (import section), /my-movies (diary/watchlist tabs)."
+}
