@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Plus, Check, Film, Loader2, Trash2, Calendar, Star, X,
-  BookOpen, Bookmark, User, Clapperboard, Users, Heart
+  BookOpen, Bookmark, User, Clapperboard, Users, Heart, MessageSquare, Pencil, RotateCcw
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -19,6 +19,355 @@ const TABS = [
 const getToken = () => localStorage.getItem("chef_token");
 const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
 
+// ========== DIARY DETAIL MODAL ==========
+const DiaryDetailModal = ({ movie, onClose, onMovieUpdated, onMovieRemoved }) => {
+  const [watches, setWatches] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editRating, setEditRating] = useState(7.0);
+  const [editDate, setEditDate] = useState("");
+  const [editComment, setEditComment] = useState("");
+  const [addingNew, setAddingNew] = useState(false);
+  const [newRating, setNewRating] = useState(7.0);
+  const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
+  const [newComment, setNewComment] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (movie?.watches) {
+      // Descending order (latest first)
+      const sorted = [...movie.watches].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+      setWatches(sorted);
+    }
+  }, [movie]);
+
+  const refreshMovie = async () => {
+    try {
+      const res = await axios.get(`${API}/user/watch-history`, { headers: authHeaders() });
+      const updated = (res.data || []).find((m) => m.tmdb_id === movie.tmdb_id);
+      if (updated) {
+        const sorted = [...(updated.watches || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+        setWatches(sorted);
+        onMovieUpdated(updated);
+      } else {
+        onMovieRemoved(movie.tmdb_id);
+        onClose();
+      }
+    } catch {}
+  };
+
+  const handleAddWatch = async () => {
+    setSaving(true);
+    try {
+      await axios.post(`${API}/user/watch-history/${movie.tmdb_id}/watches`, {
+        rating: newRating,
+        date: newDate,
+        comment: newComment,
+      }, { headers: authHeaders() });
+      toast.success("Watch added");
+      setAddingNew(false);
+      setNewRating(7.0);
+      setNewDate(new Date().toISOString().split("T")[0]);
+      setNewComment("");
+      await refreshMovie();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to add watch");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = (w) => {
+    setEditingId(w.id);
+    setEditRating(w.rating || 7.0);
+    setEditDate(w.date || "");
+    setEditComment(w.comment || "");
+  };
+
+  const handleSaveEdit = async () => {
+    setSaving(true);
+    try {
+      await axios.put(`${API}/user/watch-history/${movie.tmdb_id}/watches/${editingId}`, {
+        rating: editRating,
+        date: editDate,
+        comment: editComment,
+      }, { headers: authHeaders() });
+      toast.success("Watch updated");
+      setEditingId(null);
+      await refreshMovie();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to update");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteWatch = async (watchId) => {
+    try {
+      const res = await axios.delete(`${API}/user/watch-history/${movie.tmdb_id}/watches/${watchId}`, {
+        headers: authHeaders(),
+      });
+      if (res.data?.removed) {
+        toast.success("Movie removed from diary");
+        onMovieRemoved(movie.tmdb_id);
+        onClose();
+      } else {
+        toast.success("Watch removed");
+        await refreshMovie();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to delete");
+    }
+  };
+
+  const getWatchLabel = (index, total) => {
+    // index is in descending array, so last item (index = total-1) is the earliest = First Watch
+    const chronoIndex = total - 1 - index;
+    if (chronoIndex === 0) return "First Watch";
+    return `Re-watch #${chronoIndex}`;
+  };
+
+  if (!movie) return null;
+
+  const posterUrl = movie.poster_path
+    ? `https://image.tmdb.org/t/p/w342${movie.poster_path}`
+    : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[70] overflow-y-auto"
+      onClick={onClose}
+    >
+      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm" />
+      <div className="relative min-h-screen flex items-start justify-center py-8 px-4">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 30 }}
+          transition={{ duration: 0.35 }}
+          className="relative w-full max-w-2xl rounded-2xl overflow-hidden bg-chef-surface border border-white/10 shadow-cinematic"
+          onClick={(e) => e.stopPropagation()}
+          data-testid="diary-detail-modal"
+        >
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 backdrop-blur-sm hover:bg-black/70 transition-colors"
+            data-testid="diary-detail-close"
+          >
+            <X className="w-5 h-5 text-chef-platinum" strokeWidth={1.5} />
+          </button>
+
+          {/* Header */}
+          <div className="flex items-start gap-5 p-6 pb-4 border-b border-white/5">
+            {posterUrl ? (
+              <img src={posterUrl} alt={movie.title} className="w-20 h-[120px] rounded-lg object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-20 h-[120px] rounded-lg bg-chef-bg flex items-center justify-center flex-shrink-0">
+                <Film className="w-6 h-6 text-chef-muted/30" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1 pt-1">
+              <h2 className="font-serif text-2xl text-chef-platinum leading-tight" data-testid="diary-detail-title">{movie.title}</h2>
+              <p className="text-sm text-chef-muted mt-2">
+                {watches.length} watch{watches.length !== 1 ? "es" : ""} logged
+              </p>
+              {/* Summary: latest rating */}
+              {watches.length > 0 && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Star className="w-3.5 h-3.5 text-chef-gold" fill="#C0B283" />
+                  <span className="text-sm text-chef-gold">{watches[0].rating?.toFixed(1)}/10</span>
+                  <span className="text-xs text-chef-muted">latest</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Add Watch Button */}
+          <div className="px-6 pt-4">
+            {!addingNew ? (
+              <button
+                onClick={() => setAddingNew(true)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-chef-teal/10 border border-chef-teal/20 text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors w-full justify-center"
+                data-testid="add-watch-btn"
+              >
+                <Plus className="w-4 h-4" /> Log a New Watch
+              </button>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-chef-bg/60 border border-chef-teal/20 rounded-lg p-4 mb-2"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm text-chef-platinum font-medium">New Watch</span>
+                  <button onClick={() => setAddingNew(false)} className="text-chef-muted hover:text-chef-platinum"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-chef-muted uppercase tracking-wider mb-1">
+                      Rating: <span className="text-chef-gold font-medium">{newRating.toFixed(1)}</span>/10
+                    </label>
+                    <input type="range" min="0" max="10" step="0.1" value={newRating}
+                      onChange={(e) => setNewRating(parseFloat(e.target.value))}
+                      className="w-full accent-chef-gold" data-testid="new-watch-rating" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-chef-muted uppercase tracking-wider mb-1">Date</label>
+                    <input type="date" value={newDate}
+                      onChange={(e) => setNewDate(e.target.value)}
+                      max={new Date().toISOString().split("T")[0]}
+                      className="w-full bg-chef-surface/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-chef-platinum focus:outline-none focus:border-chef-teal/40 [color-scheme:dark]"
+                      data-testid="new-watch-date" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-chef-muted uppercase tracking-wider mb-1">Comment</label>
+                    <textarea value={newComment}
+                      onChange={(e) => setNewComment(e.target.value.slice(0, 500))}
+                      placeholder="How was this viewing?"
+                      rows={2}
+                      className="w-full bg-chef-surface/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-chef-platinum placeholder:text-chef-muted/30 focus:outline-none focus:border-chef-teal/40 resize-none"
+                      data-testid="new-watch-comment" />
+                  </div>
+                  <button
+                    onClick={handleAddWatch}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-chef-teal/10 border border-chef-teal/20 text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors disabled:opacity-50"
+                    data-testid="confirm-add-watch-btn"
+                  >
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    Save Watch
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Watches List (descending — latest first) */}
+          <div className="px-6 py-4 space-y-3 max-h-[50vh] overflow-y-auto" data-testid="watches-list">
+            {watches.length === 0 ? (
+              <p className="text-center text-sm text-chef-muted/50 py-8">No watches logged yet</p>
+            ) : (
+              watches.map((w, idx) => {
+                const isEditing = editingId === w.id;
+                const label = getWatchLabel(idx, watches.length);
+                const isRewatch = label !== "First Watch";
+
+                return (
+                  <motion.div
+                    key={w.id}
+                    layout
+                    className="bg-chef-bg/40 border border-white/5 rounded-lg p-4 group"
+                    data-testid={`watch-entry-${w.id}`}
+                  >
+                    {isEditing ? (
+                      /* Edit mode */
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-chef-muted uppercase tracking-wider flex items-center gap-1.5">
+                            {isRewatch && <RotateCcw className="w-3 h-3" />} {label}
+                          </span>
+                          <button onClick={() => setEditingId(null)} className="text-chef-muted hover:text-chef-platinum"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-chef-muted mb-1">
+                            Rating: <span className="text-chef-gold">{editRating.toFixed(1)}</span>/10
+                          </label>
+                          <input type="range" min="0" max="10" step="0.1" value={editRating}
+                            onChange={(e) => setEditRating(parseFloat(e.target.value))}
+                            className="w-full accent-chef-gold" data-testid={`edit-rating-${w.id}`} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-chef-muted mb-1">Date</label>
+                          <input type="date" value={editDate}
+                            onChange={(e) => setEditDate(e.target.value)}
+                            max={new Date().toISOString().split("T")[0]}
+                            className="w-full bg-chef-surface/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-chef-platinum focus:outline-none focus:border-chef-teal/40 [color-scheme:dark]"
+                            data-testid={`edit-date-${w.id}`} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-chef-muted mb-1">Comment</label>
+                          <textarea value={editComment}
+                            onChange={(e) => setEditComment(e.target.value.slice(0, 500))}
+                            rows={2}
+                            className="w-full bg-chef-surface/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-chef-platinum focus:outline-none focus:border-chef-teal/40 resize-none"
+                            data-testid={`edit-comment-${w.id}`} />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveEdit}
+                            disabled={saving}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-chef-teal/10 border border-chef-teal/20 text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors disabled:opacity-50"
+                            data-testid={`save-edit-${w.id}`}
+                          >
+                            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                            Save
+                          </button>
+                          <button onClick={() => setEditingId(null)}
+                            className="px-4 py-2 rounded-lg text-sm text-chef-muted hover:text-chef-platinum hover:bg-white/5 transition-colors">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* View mode */
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-chef-muted uppercase tracking-wider flex items-center gap-1.5">
+                            {isRewatch && <RotateCcw className="w-3 h-3" />} {label}
+                          </span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => startEdit(w)}
+                              className="p-1.5 rounded-md text-chef-muted/50 hover:text-chef-platinum hover:bg-white/5 transition-colors"
+                              data-testid={`edit-watch-${w.id}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteWatch(w.id)}
+                              className="p-1.5 rounded-md text-chef-muted/50 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              data-testid={`delete-watch-${w.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="flex items-center gap-1 text-sm text-chef-gold">
+                            <Star className="w-3.5 h-3.5" fill="currentColor" />
+                            {(w.rating || 0).toFixed(1)}
+                          </span>
+                          {w.date && (
+                            <span className="flex items-center gap-1 text-sm text-chef-muted">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {w.date}
+                            </span>
+                          )}
+                        </div>
+                        {w.comment && (
+                          <div className="flex items-start gap-1.5 mt-2">
+                            <MessageSquare className="w-3.5 h-3.5 text-chef-muted/50 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-chef-muted leading-relaxed">{w.comment}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+};
+
 // ========== DIARY TAB ==========
 const DiaryTab = () => {
   const debounceRef = useRef(null);
@@ -30,6 +379,7 @@ const DiaryTab = () => {
   const [addingMovie, setAddingMovie] = useState(null);
   const [addRating, setAddRating] = useState(7.0);
   const [addDate, setAddDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedMovie, setSelectedMovie] = useState(null);
 
   useEffect(() => { fetchHistory(); }, []);
 
@@ -218,7 +568,8 @@ const DiaryTab = () => {
               layout
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-4 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5 hover:border-white/10 transition-colors group"
+              className="flex items-center gap-4 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5 hover:border-white/10 transition-colors group cursor-pointer"
+              onClick={() => setSelectedMovie(item)}
               data-testid={`diary-item-${item.tmdb_id}`}
             >
               {item.poster_path ? (
@@ -245,7 +596,7 @@ const DiaryTab = () => {
                 </div>
               </div>
               <button
-                onClick={() => handleRemove(item.tmdb_id, item.title)}
+                onClick={(e) => { e.stopPropagation(); handleRemove(item.tmdb_id, item.title); }}
                 className="p-2 rounded-lg text-chef-muted/30 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
                 data-testid={`remove-diary-${item.tmdb_id}`}
               >
@@ -261,6 +612,23 @@ const DiaryTab = () => {
           <p className="text-xs text-chef-muted/30 mt-1">Search above to start tracking!</p>
         </div>
       )}
+
+      {/* Diary Detail Modal */}
+      <AnimatePresence>
+        {selectedMovie && (
+          <DiaryDetailModal
+            movie={selectedMovie}
+            onClose={() => setSelectedMovie(null)}
+            onMovieUpdated={(updated) => {
+              setWatchHistory((prev) => prev.map((m) => m.tmdb_id === updated.tmdb_id ? updated : m));
+              setSelectedMovie(updated);
+            }}
+            onMovieRemoved={(tmdbId) => {
+              setWatchHistory((prev) => prev.filter((m) => m.tmdb_id !== tmdbId));
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

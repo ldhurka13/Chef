@@ -87,6 +87,16 @@ class WatchHistoryUpdate(BaseModel):
     user_rating: Optional[float] = Field(default=None, ge=0, le=10)
     watched_date: Optional[str] = None
 
+class WatchEntryCreate(BaseModel):
+    rating: float = Field(ge=0, le=10, default=7.0)
+    date: Optional[str] = None
+    comment: Optional[str] = None
+
+class WatchEntryUpdate(BaseModel):
+    rating: Optional[float] = Field(default=None, ge=0, le=10)
+    date: Optional[str] = None
+    comment: Optional[str] = None
+
 class MovieMetadata(BaseModel):
     model_config = ConfigDict(extra="ignore")
     tmdb_id: int
@@ -966,6 +976,33 @@ async def get_watch_history(current_user: dict = Depends(get_current_user)):
         {"_id": 0}
     ).sort("last_watched_date", -1).to_list(500)
     
+    # Auto-migrate: ensure every doc has a `watches` array
+    for doc in history:
+        if "watches" not in doc:
+            watches = []
+            watch_dates = doc.get("watch_dates", [])
+            rating = doc.get("user_rating", 7.0)
+            for wd in sorted(watch_dates):
+                watches.append({
+                    "id": str(uuid.uuid4()),
+                    "rating": rating,
+                    "date": wd,
+                    "comment": ""
+                })
+            if not watches and doc.get("last_watched_date"):
+                watches.append({
+                    "id": str(uuid.uuid4()),
+                    "rating": rating,
+                    "date": doc.get("last_watched_date", ""),
+                    "comment": ""
+                })
+            doc["watches"] = watches
+            # Persist migration
+            await db.watch_history.update_one(
+                {"user_id": current_user["id"], "tmdb_id": doc["tmdb_id"]},
+                {"$set": {"watches": watches}}
+            )
+    
     return history
 
 @api_router.post("/user/watch-history")
@@ -975,6 +1012,12 @@ async def add_to_watch_history(item: WatchHistoryCreate, current_user: dict = De
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     watched_date = item.watched_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    watch_entry = {
+        "id": str(uuid.uuid4()),
+        "rating": item.user_rating,
+        "date": watched_date,
+        "comment": ""
+    }
     
     # Check if already in history
     existing = await db.watch_history.find_one(
@@ -983,20 +1026,20 @@ async def add_to_watch_history(item: WatchHistoryCreate, current_user: dict = De
     )
     
     if existing:
-        # Append new watch date and update rating
-        watch_dates = existing.get("watch_dates", [])
-        if watched_date not in watch_dates:
-            watch_dates.append(watched_date)
-        watch_dates.sort(reverse=True)
+        watches = existing.get("watches", [])
+        watches.append(watch_entry)
+        watch_dates = [w["date"] for w in watches]
+        watch_dates_sorted = sorted(watch_dates, reverse=True)
         
         await db.watch_history.update_one(
             {"user_id": current_user["id"], "tmdb_id": item.tmdb_id},
             {
                 "$set": {
                     "user_rating": item.user_rating,
-                    "last_watched_date": watch_dates[0],
-                    "watch_dates": watch_dates,
-                    "watch_count": len(watch_dates),
+                    "last_watched_date": watch_dates_sorted[0],
+                    "watch_dates": watch_dates_sorted,
+                    "watch_count": len(watches),
+                    "watches": watches,
                     "title": item.title or existing.get("title", ""),
                     "poster_path": item.poster_path or existing.get("poster_path")
                 }
@@ -1017,6 +1060,7 @@ async def add_to_watch_history(item: WatchHistoryCreate, current_user: dict = De
         "watch_dates": [watched_date],
         "last_watched_date": watched_date,
         "watch_count": 1,
+        "watches": [watch_entry],
         "title": item.title,
         "poster_path": item.poster_path
     }
@@ -1076,6 +1120,137 @@ async def remove_from_watch_history(tmdb_id: int, current_user: dict = Depends(g
         raise HTTPException(status_code=404, detail="Movie not in watch history")
     
     return {"message": "Removed from watch history"}
+
+# ============ INDIVIDUAL WATCH ENTRY ENDPOINTS ============
+
+def _sync_watch_summary(watches: list) -> dict:
+    """Recompute summary fields from watches array"""
+    if not watches:
+        return {"user_rating": 0, "last_watched_date": "", "watch_dates": [], "watch_count": 0}
+    dates = sorted([w["date"] for w in watches if w.get("date")], reverse=True)
+    latest_watch = max(watches, key=lambda w: w.get("date", ""))
+    return {
+        "user_rating": latest_watch.get("rating", 0),
+        "last_watched_date": dates[0] if dates else "",
+        "watch_dates": dates,
+        "watch_count": len(watches),
+    }
+
+@api_router.post("/user/watch-history/{tmdb_id}/watches")
+async def add_watch_entry(tmdb_id: int, entry: WatchEntryCreate, current_user: dict = Depends(get_current_user)):
+    """Add a new watch entry to an existing movie in history"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    existing = await db.watch_history.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Movie not in watch history")
+    
+    watch_entry = {
+        "id": str(uuid.uuid4()),
+        "rating": entry.rating,
+        "date": entry.date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "comment": (entry.comment or "")[:500]
+    }
+    
+    watches = existing.get("watches", [])
+    watches.append(watch_entry)
+    summary = _sync_watch_summary(watches)
+    
+    await db.watch_history.update_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"$set": {"watches": watches, **summary}}
+    )
+    
+    updated = await db.watch_history.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    return updated
+
+@api_router.put("/user/watch-history/{tmdb_id}/watches/{watch_id}")
+async def update_watch_entry(tmdb_id: int, watch_id: str, entry: WatchEntryUpdate, current_user: dict = Depends(get_current_user)):
+    """Edit a single watch entry"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    existing = await db.watch_history.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Movie not in watch history")
+    
+    watches = existing.get("watches", [])
+    found = False
+    for w in watches:
+        if w["id"] == watch_id:
+            if entry.rating is not None:
+                w["rating"] = entry.rating
+            if entry.date is not None:
+                w["date"] = entry.date
+            if entry.comment is not None:
+                w["comment"] = entry.comment[:500]
+            found = True
+            break
+    
+    if not found:
+        raise HTTPException(status_code=404, detail="Watch entry not found")
+    
+    summary = _sync_watch_summary(watches)
+    
+    await db.watch_history.update_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"$set": {"watches": watches, **summary}}
+    )
+    
+    updated = await db.watch_history.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    return updated
+
+@api_router.delete("/user/watch-history/{tmdb_id}/watches/{watch_id}")
+async def delete_watch_entry(tmdb_id: int, watch_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a single watch entry. If last entry, removes the movie from history."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    existing = await db.watch_history.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Movie not in watch history")
+    
+    watches = existing.get("watches", [])
+    new_watches = [w for w in watches if w["id"] != watch_id]
+    
+    if len(new_watches) == len(watches):
+        raise HTTPException(status_code=404, detail="Watch entry not found")
+    
+    if not new_watches:
+        # Last watch removed — delete the entire movie from history
+        await db.watch_history.delete_one(
+            {"user_id": current_user["id"], "tmdb_id": tmdb_id}
+        )
+        return {"message": "Movie removed from history (last watch deleted)", "removed": True}
+    
+    summary = _sync_watch_summary(new_watches)
+    
+    await db.watch_history.update_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"$set": {"watches": new_watches, **summary}}
+    )
+    
+    updated = await db.watch_history.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    return updated
 
 # ============ WATCHLIST ENDPOINTS ============
 
