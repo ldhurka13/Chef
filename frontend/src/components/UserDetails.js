@@ -11,10 +11,9 @@ import { toast } from "sonner";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const GENDER_OPTIONS = [
+  { value: "male", label: "M" },
+  { value: "female", label: "F" },
   { value: "", label: "Prefer not to say" },
-  { value: "male", label: "Male" },
-  { value: "female", label: "Female" },
-  { value: "non-binary", label: "Non-binary" },
 ];
 
 const STREAMING_SERVICES = [
@@ -219,18 +218,26 @@ const UserDetails = ({ user, onUserUpdate }) => {
           <div className="space-y-5">
             <div>
               <label className="block text-xs text-chef-muted uppercase tracking-wider mb-2">Gender</label>
-              <select
-                value={gender}
-                onChange={(e) => setGender(e.target.value)}
-                className="w-full bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-3
-                         text-sm text-chef-platinum focus:outline-none focus:border-chef-teal/40
-                         transition-colors appearance-none"
-                data-testid="gender-select"
-              >
-                {GENDER_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value} className="bg-chef-bg">{o.label}</option>
-                ))}
-              </select>
+              <div className="flex gap-2" data-testid="gender-select">
+                {GENDER_OPTIONS.map((o) => {
+                  const isActive = gender === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => setGender(o.value)}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200
+                        ${isActive
+                          ? "bg-chef-teal/15 border-chef-teal/40 text-chef-teal"
+                          : "bg-transparent border-white/10 text-chef-muted hover:border-white/20 hover:text-chef-platinum"
+                        }`}
+                      data-testid={`gender-option-${o.value || "none"}`}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div>
               <label className="block text-xs text-chef-muted uppercase tracking-wider mb-2">

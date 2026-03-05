@@ -9,6 +9,16 @@ module.exports = {
     extend: {
       colors: {
         // Chef Noir & Grain Palette
+        chef: {
+          bg: '#0A0A0B',
+          surface: '#161618',
+          'surface-highlight': '#1F1F22',
+          platinum: '#E5E5E5',
+          muted: '#A1A1AA',
+          gold: '#C0B283',
+          teal: '#2DD4BF',
+          orange: '#F97316',
+        },
         flick: {
           bg: '#0A0A0B',
           surface: '#161618',
