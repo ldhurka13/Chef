@@ -58,8 +58,8 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - `POST /api/auth/forgot-password` - Generate reset token
 - `POST /api/auth/reset-password` - Reset password with token
 - `POST /api/auth/upload-avatar` - Profile photo upload
-- `POST /api/auth/import-letterboxd` - Letterboxd CSV import
-- `GET /api/auth/letterboxd-data` - Get imported Letterboxd data
+- `POST /api/auth/import-letterboxd` - Letterboxd ZIP/CSV import (populates diary + watchlist)
+- `GET /api/auth/letterboxd-data` - Get import status/stats
 - `GET /api/user/watch-history` - Get user's diary
 - `POST /api/user/watch-history` - Add to diary
 - `PUT /api/user/watch-history/{tmdb_id}` - Update diary entry
@@ -111,7 +111,7 @@ Build a context-aware movie recommendation engine called "Chef" with:
     - [x] Inline edit & delete per watch; deleting last watch removes movie from diary
   - [x] **Watchlist** - Search & add movies to watch later, remove from watchlist
   - [x] **Profile** - Favorite Genres, Favorite Actors, Favorite Directors, Top 5 Favorite Movies
-- [x] Add to Watchlist button in movie detail modal (toggle on/off)
+- [x] **Letterboxd Import**: ZIP + CSV support; ratings.csv → Diary (5→10 scale), reviews.csv → comments, watchlist.csv → Watchlist. Orange "LB" badge on imported items
 - [x] Password reset via Resend email API
 
 ## Future Tasks (P2)
