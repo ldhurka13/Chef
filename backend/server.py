@@ -136,6 +136,15 @@ class UserUpdate(BaseModel):
     favorite_actors: Optional[List[str]] = None
     favorite_movies: Optional[List[Dict[str, Any]]] = None
     streaming_services: Optional[List[str]] = None
+    favorite_directors: Optional[List[str]] = None
+
+class WatchlistAdd(BaseModel):
+    tmdb_id: int
+    title: str = ""
+    poster_path: Optional[str] = None
+    release_date: Optional[str] = None
+    vote_average: Optional[float] = None
+    genres: Optional[List[str]] = None
 
 class LocationPermissionUpdate(BaseModel):
     location_permission: str  # "always", "ask", "never"
@@ -526,6 +535,7 @@ async def login(data: UserLogin):
             "bio": user.get("bio"),
             "favorite_actors": user.get("favorite_actors", []),
             "favorite_movies": user.get("favorite_movies", []),
+            "favorite_directors": user.get("favorite_directors", []),
             "letterboxd_connected": user.get("letterboxd_connected", False),
             "letterboxd_count": user.get("letterboxd_count", 0)
         }
@@ -581,6 +591,9 @@ async def update_profile(data: UserUpdate, current_user: dict = Depends(get_curr
     
     if data.streaming_services is not None:
         update_data["streaming_services"] = data.streaming_services
+    
+    if data.favorite_directors is not None:
+        update_data["favorite_directors"] = data.favorite_directors[:20]
     
     if update_data:
         await db.auth_users.update_one(
@@ -1063,6 +1076,73 @@ async def remove_from_watch_history(tmdb_id: int, current_user: dict = Depends(g
         raise HTTPException(status_code=404, detail="Movie not in watch history")
     
     return {"message": "Removed from watch history"}
+
+# ============ WATCHLIST ENDPOINTS ============
+
+@api_router.get("/user/watchlist")
+async def get_watchlist(current_user: dict = Depends(get_current_user)):
+    """Get authenticated user's watchlist"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    items = await db.watchlist.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("added_at", -1).to_list(500)
+    
+    return items
+
+@api_router.post("/user/watchlist")
+async def add_to_watchlist(item: WatchlistAdd, current_user: dict = Depends(get_current_user)):
+    """Add movie to authenticated user's watchlist"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    existing = await db.watchlist.find_one(
+        {"user_id": current_user["id"], "tmdb_id": item.tmdb_id}
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Already in watchlist")
+    
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "tmdb_id": item.tmdb_id,
+        "title": item.title,
+        "poster_path": item.poster_path,
+        "release_date": item.release_date,
+        "vote_average": item.vote_average,
+        "genres": item.genres or [],
+        "added_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.watchlist.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.delete("/user/watchlist/{tmdb_id}")
+async def remove_from_watchlist(tmdb_id: int, current_user: dict = Depends(get_current_user)):
+    """Remove movie from authenticated user's watchlist"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    result = await db.watchlist.delete_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Movie not in watchlist")
+    return {"message": "Removed from watchlist"}
+
+@api_router.get("/user/watchlist/check/{tmdb_id}")
+async def check_watchlist(tmdb_id: int, current_user: dict = Depends(get_current_user)):
+    """Check if a movie is in the user's watchlist"""
+    if not current_user:
+        return {"in_watchlist": False}
+    
+    existing = await db.watchlist.find_one(
+        {"user_id": current_user["id"], "tmdb_id": tmdb_id},
+        {"_id": 0}
+    )
+    return {"in_watchlist": existing is not None}
 
 # Movie endpoints
 @api_router.post("/movies/discover")

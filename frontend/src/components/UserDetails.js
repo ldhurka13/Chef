@@ -41,36 +41,24 @@ const UserDetails = ({ user, onUserUpdate }) => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const csvInputRef = useRef(null);
-  const debounceRef = useRef(null);
 
   const [gender, setGender] = useState(user?.gender || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || "");
-  const [favoriteActors, setFavoriteActors] = useState(user?.favorite_actors || []);
-  const [actorInput, setActorInput] = useState("");
-  const [favoriteMovies, setFavoriteMovies] = useState(user?.favorite_movies || []);
   const [streamingServices, setStreamingServices] = useState(user?.streaming_services || []);
-  const [movieQuery, setMovieQuery] = useState("");
-  const [movieResults, setMovieResults] = useState([]);
-  const [movieSearching, setMovieSearching] = useState(false);
   const [letterboxdData, setLetterboxdData] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [csvUploading, setCsvUploading] = useState(false);
 
-  // Sync state when user prop changes
   useEffect(() => {
     setGender(user?.gender || "");
     setBio(user?.bio || "");
     setAvatarUrl(user?.avatar_url || "");
-    setFavoriteActors(user?.favorite_actors || []);
-    setFavoriteMovies(user?.favorite_movies || []);
     setStreamingServices(user?.streaming_services || []);
   }, [user]);
 
-  useEffect(() => {
-    fetchLetterboxdData();
-  }, []);
+  useEffect(() => { fetchLetterboxdData(); }, []);
 
   const getToken = () => localStorage.getItem("chef_token");
   const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
@@ -103,34 +91,6 @@ const UserDetails = ({ user, onUserUpdate }) => {
     }
   };
 
-  const handleAddActor = () => {
-    const name = actorInput.trim();
-    if (!name || favoriteActors.includes(name) || favoriteActors.length >= 20) return;
-    setFavoriteActors((prev) => [...prev, name]);
-    setActorInput("");
-  };
-
-  const handleMovieSearch = useCallback((q) => {
-    setMovieQuery(q);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (q.length < 2) { setMovieResults([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      setMovieSearching(true);
-      try {
-        const res = await axios.get(`${API}/movies/search-tmdb?query=${encodeURIComponent(q)}`);
-        setMovieResults(res.data.results || []);
-      } catch { setMovieResults([]); }
-      finally { setMovieSearching(false); }
-    }, 350);
-  }, []);
-
-  const handleAddMovie = (movie) => {
-    if (favoriteMovies.length >= 5 || favoriteMovies.some((m) => m.id === movie.id)) return;
-    setFavoriteMovies((prev) => [...prev, movie]);
-    setMovieQuery("");
-    setMovieResults([]);
-  };
-
   const handleCsvUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -161,7 +121,7 @@ const UserDetails = ({ user, onUserUpdate }) => {
     try {
       const res = await axios.put(
         `${API}/auth/profile`,
-        { gender, bio, favorite_actors: favoriteActors, favorite_movies: favoriteMovies, streaming_services: streamingServices },
+        { gender, bio, streaming_services: streamingServices },
         { headers: authHeaders() }
       );
       if (onUserUpdate) onUserUpdate(res.data);
@@ -317,145 +277,6 @@ const UserDetails = ({ user, onUserUpdate }) => {
                     <span className="text-sm text-chef-platinum truncate">{svc.name}</span>
                   </div>
                 </button>
-              );
-            })}
-          </div>
-        </Section>
-
-        {/* Favorite Actors */}
-        <Section title="Favorite Actors" icon={Star}>
-          <div className="flex gap-2 mb-3">
-            <input
-              type="text"
-              value={actorInput}
-              onChange={(e) => setActorInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddActor()}
-              placeholder="Type actor name and press Enter"
-              className="flex-1 bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-2.5
-                       text-sm text-chef-platinum placeholder:text-chef-muted/30
-                       focus:outline-none focus:border-chef-teal/40 transition-colors"
-              data-testid="actor-input"
-            />
-            <button
-              onClick={handleAddActor}
-              disabled={!actorInput.trim()}
-              className="px-4 py-2.5 rounded-lg bg-chef-teal/10 border border-chef-teal/20
-                       text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors
-                       disabled:opacity-30 disabled:cursor-not-allowed"
-              data-testid="add-actor-btn"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <AnimatePresence>
-              {favoriteActors.map((actor) => (
-                <motion.span
-                  key={actor}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm
-                           bg-chef-surface border border-white/10 text-chef-platinum"
-                >
-                  {actor}
-                  <button
-                    onClick={() => setFavoriteActors((prev) => prev.filter((a) => a !== actor))}
-                    className="text-chef-muted hover:text-red-400 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </motion.span>
-              ))}
-            </AnimatePresence>
-            {favoriteActors.length === 0 && (
-              <p className="text-sm text-chef-muted/40">No favorite actors added yet</p>
-            )}
-          </div>
-        </Section>
-
-        {/* Top 5 Favorite Movies */}
-        <Section title="Top 5 Favorite Movies" icon={Film}>
-          {favoriteMovies.length < 5 && (
-            <div className="relative mb-4">
-              <div className="flex items-center gap-2 bg-chef-surface/60 border border-white/10
-                            rounded-lg px-4 py-2.5">
-                <Search className="w-4 h-4 text-chef-muted/40" />
-                <input
-                  type="text"
-                  value={movieQuery}
-                  onChange={(e) => handleMovieSearch(e.target.value)}
-                  placeholder="Search for a movie..."
-                  className="flex-1 bg-transparent text-sm text-chef-platinum
-                           placeholder:text-chef-muted/30 focus:outline-none"
-                  data-testid="movie-search-input"
-                />
-                {movieSearching && <Loader2 className="w-4 h-4 text-chef-teal animate-spin" />}
-              </div>
-              {movieResults.length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-20
-                              bg-chef-surface/95 backdrop-blur-xl border border-white/10
-                              rounded-lg overflow-hidden shadow-cinematic max-h-72 overflow-y-auto">
-                  {movieResults.map((m) => {
-                    const isAdded = favoriteMovies.some((fm) => fm.id === m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => !isAdded && handleAddMovie(m)}
-                        disabled={isAdded}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left
-                                  transition-colors ${isAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-white/5"}`}
-                        data-testid={`movie-result-${m.id}`}
-                      >
-                        {m.poster_url ? (
-                          <img src={m.poster_url} alt="" className="w-8 h-12 rounded object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-8 h-12 rounded bg-chef-bg flex-shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-sm text-chef-platinum truncate">{m.title}</p>
-                          <p className="text-xs text-chef-muted">{m.year} {m.rating ? `/ ${m.rating}` : ""}</p>
-                        </div>
-                        {isAdded && <Check className="w-4 h-4 text-chef-teal ml-auto flex-shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="grid grid-cols-5 gap-3">
-            {[...Array(5)].map((_, i) => {
-              const movie = favoriteMovies[i];
-              return (
-                <div key={i} className="relative aspect-[2/3] rounded-lg overflow-hidden border border-white/10 bg-chef-surface/40">
-                  {movie ? (
-                    <>
-                      {movie.poster_url ? (
-                        <img src={movie.poster_url} alt={movie.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Film className="w-6 h-6 text-chef-muted/30" />
-                        </div>
-                      )}
-                      <button
-                        onClick={() => setFavoriteMovies((prev) => prev.filter((m) => m.id !== movie.id))}
-                        className="absolute top-1 right-1 p-1 rounded-full bg-black/70
-                                 text-white hover:bg-red-500/80 transition-colors"
-                        data-testid={`remove-movie-${i}`}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                        <p className="text-[10px] text-white leading-tight truncate">{movie.title}</p>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-                      <span className="text-xl font-serif text-chef-muted/20">{i + 1}</span>
-                    </div>
-                  )}
-                </div>
               );
             })}
           </div>

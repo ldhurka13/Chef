@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Star, Clock, Calendar, Plus, Check, Play, Tv, ExternalLink } from "lucide-react";
+import { X, Star, Clock, Calendar, Plus, Check, Play, Tv, ExternalLink, Bookmark } from "lucide-react";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const getToken = () => localStorage.getItem("chef_token");
 
 // Get user's country code from browser locale
 const getUserCountry = () => {
@@ -43,15 +44,19 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry })
   const [showRatingInput, setShowRatingInput] = useState(false);
   const [streamingOptions, setStreamingOptions] = useState([]);
   const [streamingLoading, setStreamingLoading] = useState(false);
+  const [inWatchlist, setInWatchlist] = useState(false);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
 
   useEffect(() => {
     if (open && movie?.id) {
       fetchDetails(movie.id);
       fetchStreaming(movie.id);
+      checkWatchlist(movie.id);
     }
     if (!open) {
       setStreamingOptions([]);
       setShowRatingInput(false);
+      setInWatchlist(false);
     }
   }, [open, movie]);
 
@@ -86,6 +91,44 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry })
       onAddToHistory(details, userRating);
       setShowRatingInput(false);
     }
+  };
+
+  const checkWatchlist = async (movieId) => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API}/user/watchlist/check/${movieId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setInWatchlist(res.data.in_watchlist);
+    } catch {}
+  };
+
+  const handleToggleWatchlist = async () => {
+    const token = getToken();
+    if (!token) return;
+    setWatchlistLoading(true);
+    try {
+      if (inWatchlist) {
+        await axios.delete(`${API}/user/watchlist/${data.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setInWatchlist(false);
+      } else {
+        await axios.post(`${API}/user/watchlist`, {
+          tmdb_id: data.id,
+          title: data.title,
+          poster_path: data.poster_path,
+          release_date: data.release_date,
+          vote_average: data.vote_average,
+          genres: data.genres || [],
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setInWatchlist(true);
+      }
+    } catch {}
+    setWatchlistLoading(false);
   };
 
   const data = details || movie;
@@ -247,6 +290,21 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry })
 
                         {/* Actions */}
                         <div className="flex flex-wrap gap-3">
+                          {/* Watchlist Button */}
+                          <button
+                            onClick={handleToggleWatchlist}
+                            disabled={watchlistLoading}
+                            className={`flex items-center gap-2 px-5 py-3 rounded-full border transition-colors
+                              ${inWatchlist
+                                ? "bg-chef-teal/20 border-chef-teal/30 text-chef-teal"
+                                : "bg-white/5 border-white/10 text-chef-muted hover:text-chef-platinum hover:border-white/20"
+                              }`}
+                            data-testid="toggle-watchlist-btn"
+                          >
+                            <Bookmark className="w-4 h-4" fill={inWatchlist ? "currentColor" : "none"} />
+                            <span>{inWatchlist ? "In Watchlist" : "Add to Watchlist"}</span>
+                          </button>
+
                           {details?.in_history ? (
                             <div className="flex items-center gap-2 px-6 py-3 rounded-full
                                           bg-chef-teal/20 border border-chef-teal/30

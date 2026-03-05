@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Home, Sliders, Shuffle, Film, Coffee } from "lucide-react";
+import { Home, Sliders, Shuffle, Bookmark, Coffee } from "lucide-react";
 
 const NavItem = ({ icon: Icon, label, isActive, onClick }) => {
   return (
@@ -82,10 +82,10 @@ const FloatingNav = ({ onVibeClick, onRandomClick, onComfortClick }) => {
       </motion.button>
       
       <NavItem
-        icon={Film}
-        label="History"
-        isActive={location.pathname === "/history"}
-        onClick={() => navigate("/history")}
+        icon={Bookmark}
+        label="My Movies"
+        isActive={location.pathname === "/my-movies"}
+        onClick={() => navigate("/my-movies")}
       />
       
       <NavItem

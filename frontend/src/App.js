@@ -23,7 +23,7 @@ import ProfileModal from "./components/ProfileModal";
 import LocationPermissionModal from "./components/LocationPermissionModal";
 import UserDetails from "./components/UserDetails";
 import ResetPassword from "./components/ResetPassword";
-import WatchHistoryPage from "./components/WatchHistoryPage";
+import MyMoviesPage from "./components/MyMoviesPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -529,9 +529,9 @@ function AppContent() {
               }
             />
             <Route
-              path="/history"
+              path="/my-movies"
               element={
-                <WatchHistoryPage user={authUser} />
+                <MyMoviesPage user={authUser} onUserUpdate={(updated) => setAuthUser(updated)} />
               }
             />
             <Route
