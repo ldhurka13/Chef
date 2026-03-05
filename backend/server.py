@@ -623,7 +623,7 @@ async def forgot_password(data: ForgotPasswordRequest):
     )
     
     # Build reset URL
-    frontend_url = os.environ.get("FRONTEND_URL", "https://vibe-picks.preview.emergentagent.com")
+    frontend_url = os.environ.get("FRONTEND_URL", "https://watchlist-diary.preview.emergentagent.com")
     reset_url = f"{frontend_url}/reset-password?token={reset_token}"
     
     # Send email via Resend

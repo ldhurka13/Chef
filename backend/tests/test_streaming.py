@@ -7,7 +7,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://vibe-picks.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://watchlist-diary.preview.emergentagent.com').rstrip('/')
 
 # Test movie IDs with known streaming availability
 DARK_KNIGHT_ID = 155  # Has Max, Hulu, Prime in US
