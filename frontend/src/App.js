@@ -277,10 +277,10 @@ function AppContent() {
     
     const initializeData = async () => {
       try {
-        // Seed initial data
-        await axios.post(`${API}/seed-data`);
+        // Seed initial data (mock user for default sections)
+        await axios.post(`${API}/seed-data`).catch(() => {});
         
-        // Fetch trending movies
+        // Fetch trending movies for hero
         const trendingRes = await axios.get(`${API}/movies/trending`);
         setTrendingMovies(trendingRes.data.results || []);
         
@@ -289,7 +289,7 @@ function AppContent() {
         if (token) {
           const historyRes = await axios.get(`${API}/user/watch-history`, {
             headers: { Authorization: `Bearer ${token}` }
-          });
+          }).catch(() => ({ data: [] }));
           setWatchHistory(historyRes.data || []);
         }
         
@@ -297,7 +297,6 @@ function AppContent() {
         await fetchSectionMovies("curated");
       } catch (error) {
         console.error("Failed to initialize:", error);
-        toast.error("Failed to load movies");
       } finally {
         setLoading(false);
       }

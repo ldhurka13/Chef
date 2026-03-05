@@ -2269,33 +2269,32 @@ async def get_genre_list():
 # Seed initial watch history
 @api_router.post("/seed-data")
 async def seed_initial_data():
-    """Seed mock user and watch history"""
-    # Create or get user
+    """Seed mock user and watch history for default recommendations"""
     user = await db.users.find_one({"username": "flick_user"}, {"_id": 0})
     
     if not user:
-        mock_user = User(username="flick_user", birth_year=1995)
-        doc = mock_user.model_dump()
-        doc['created_at'] = doc['created_at'].isoformat()
-        await db.users.insert_one(doc)
-        user = doc
+        user_id = str(uuid.uuid4())
+        user_doc = {
+            "id": user_id,
+            "username": "flick_user",
+            "birth_year": 1995,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.users.insert_one(user_doc)
+        user = user_doc
     
     user_id = user["id"]
     
-    # Check if history already seeded
     existing_count = await db.watch_history.count_documents({"user_id": user_id})
     if existing_count >= 10:
         return {"message": "Data already seeded", "count": existing_count}
     
-    # Mock watch history: 10 classic movies (5 high rated, 5 lower rated)
     mock_movies = [
-        # High rated (8-10)
         {"tmdb_id": 278, "user_rating": 10, "title": "The Shawshank Redemption", "days_ago": 400},
         {"tmdb_id": 238, "user_rating": 9, "title": "The Godfather", "days_ago": 500},
         {"tmdb_id": 155, "user_rating": 9, "title": "The Dark Knight", "days_ago": 380},
         {"tmdb_id": 550, "user_rating": 8, "title": "Fight Club", "days_ago": 450},
         {"tmdb_id": 680, "user_rating": 8, "title": "Pulp Fiction", "days_ago": 420},
-        # Lower rated (4-6)
         {"tmdb_id": 862, "user_rating": 6, "title": "Toy Story", "days_ago": 200},
         {"tmdb_id": 13, "user_rating": 5, "title": "Forrest Gump", "days_ago": 150},
         {"tmdb_id": 637, "user_rating": 5, "title": "Life Is Beautiful", "days_ago": 180},
@@ -2304,25 +2303,22 @@ async def seed_initial_data():
     ]
     
     for movie in mock_movies:
-        # Get poster from TMDB
         details = tmdb_request(f"/movie/{movie['tmdb_id']}")
         poster_path = details.get("poster_path") if details else None
+        watch_date = (datetime.now(timezone.utc) - timedelta(days=movie["days_ago"])).strftime("%Y-%m-%d")
         
-        watch_date = datetime.now(timezone.utc) - timedelta(days=movie["days_ago"])
+        doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "tmdb_id": movie["tmdb_id"],
+            "user_rating": float(movie["user_rating"]),
+            "watch_dates": [watch_date],
+            "last_watched_date": watch_date,
+            "watch_count": 1,
+            "title": movie["title"],
+            "poster_path": poster_path
+        }
         
-        watch_item = WatchHistoryItem(
-            user_id=user_id,
-            tmdb_id=movie["tmdb_id"],
-            user_rating=movie["user_rating"],
-            last_watched_date=watch_date,
-            title=movie["title"],
-            poster_path=poster_path
-        )
-        
-        doc = watch_item.model_dump()
-        doc['last_watched_date'] = doc['last_watched_date'].isoformat()
-        
-        # Upsert to avoid duplicates
         await db.watch_history.update_one(
             {"user_id": user_id, "tmdb_id": movie["tmdb_id"]},
             {"$set": doc},
