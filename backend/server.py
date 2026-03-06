@@ -1481,6 +1481,17 @@ async def remove_from_watch_history(tmdb_id: int, current_user: dict = Depends(g
     await _invalidate_insights_cache(current_user["id"])
     return {"message": "Removed from watch history"}
 
+@api_router.delete("/user/watch-history")
+async def clear_all_watch_history(current_user: dict = Depends(get_current_user)):
+    """Clear all movies from authenticated user's watch history (diary)"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    result = await db.watch_history.delete_many({"user_id": current_user["id"]})
+    await _invalidate_insights_cache(current_user["id"])
+    
+    return {"message": f"Cleared {result.deleted_count} movies from diary", "deleted_count": result.deleted_count}
+
 # ============ INDIVIDUAL WATCH ENTRY ENDPOINTS ============
 
 def _sync_watch_summary(watches: list) -> dict:
@@ -1882,6 +1893,16 @@ async def remove_from_watchlist(tmdb_id: int, current_user: dict = Depends(get_c
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Movie not in watchlist")
     return {"message": "Removed from watchlist"}
+
+@api_router.delete("/user/watchlist")
+async def clear_all_watchlist(current_user: dict = Depends(get_current_user)):
+    """Clear all movies from authenticated user's watchlist"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    result = await db.watchlist.delete_many({"user_id": current_user["id"]})
+    
+    return {"message": f"Cleared {result.deleted_count} movies from watchlist", "deleted_count": result.deleted_count}
 
 @api_router.get("/user/watchlist/check/{tmdb_id}")
 async def check_watchlist(tmdb_id: int, current_user: dict = Depends(get_current_user)):

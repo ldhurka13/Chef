@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Plus, Check, Film, Loader2, Trash2, Calendar, Star, X,
-  BookOpen, Bookmark, User, Clapperboard, Users, Heart, MessageSquare, Pencil, RotateCcw
+  BookOpen, Bookmark, User, Clapperboard, Users, Heart, MessageSquare, Pencil, RotateCcw, AlertTriangle
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -383,6 +383,8 @@ const DiaryTab = () => {
   const [addRating, setAddRating] = useState(7.0);
   const [addDate, setAddDate] = useState(new Date().toISOString().split("T")[0]);
   const [selectedMovie, setSelectedMovie] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => { fetchHistory(); }, []);
 
@@ -446,11 +448,87 @@ const DiaryTab = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      const res = await axios.delete(`${API}/user/watch-history`, { headers: authHeaders() });
+      setWatchHistory([]);
+      toast.success(res.data?.message || "Diary cleared");
+      setShowClearConfirm(false);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to clear diary");
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div>
-      <p className="text-sm text-chef-muted mb-6">
-        {watchHistory.length} movie{watchHistory.length !== 1 ? "s" : ""} tracked
-      </p>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-sm text-chef-muted">
+          {watchHistory.length} movie{watchHistory.length !== 1 ? "s" : ""} tracked
+        </p>
+        {watchHistory.length > 0 && (
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            data-testid="diary-clear-all-btn"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Clear All
+          </button>
+        )}
+      </div>
+
+      {/* Clear All Confirmation Modal */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+            onClick={() => setShowClearConfirm(false)}
+          >
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-chef-surface border border-white/10 rounded-xl p-6 max-w-sm w-full shadow-cinematic"
+              onClick={(e) => e.stopPropagation()}
+              data-testid="diary-clear-confirm-modal"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-full bg-red-500/10">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <h3 className="font-serif text-lg text-chef-platinum">Clear Diary?</h3>
+              </div>
+              <p className="text-sm text-chef-muted mb-6">
+                This will permanently delete all {watchHistory.length} movie{watchHistory.length !== 1 ? "s" : ""} from your diary. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 px-4 py-2.5 rounded-lg text-sm text-chef-muted hover:text-chef-platinum hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleClearAll}
+                  disabled={clearing}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                  data-testid="diary-clear-confirm-btn"
+                >
+                  {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Clear All
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search to add */}
       <div className="relative mb-6">
@@ -647,6 +725,8 @@ const WatchlistTab = () => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => { fetchWatchlist(); }, []);
 
@@ -702,11 +782,87 @@ const WatchlistTab = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      const res = await axios.delete(`${API}/user/watchlist`, { headers: authHeaders() });
+      setWatchlist([]);
+      toast.success(res.data?.message || "Watchlist cleared");
+      setShowClearConfirm(false);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to clear watchlist");
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div>
-      <p className="text-sm text-chef-muted mb-6">
-        {watchlist.length} movie{watchlist.length !== 1 ? "s" : ""} to watch
-      </p>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-sm text-chef-muted">
+          {watchlist.length} movie{watchlist.length !== 1 ? "s" : ""} to watch
+        </p>
+        {watchlist.length > 0 && (
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            data-testid="watchlist-clear-all-btn"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Clear All
+          </button>
+        )}
+      </div>
+
+      {/* Clear All Confirmation Modal */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+            onClick={() => setShowClearConfirm(false)}
+          >
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-chef-surface border border-white/10 rounded-xl p-6 max-w-sm w-full shadow-cinematic"
+              onClick={(e) => e.stopPropagation()}
+              data-testid="watchlist-clear-confirm-modal"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-full bg-red-500/10">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <h3 className="font-serif text-lg text-chef-platinum">Clear Watchlist?</h3>
+              </div>
+              <p className="text-sm text-chef-muted mb-6">
+                This will permanently delete all {watchlist.length} movie{watchlist.length !== 1 ? "s" : ""} from your watchlist. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 px-4 py-2.5 rounded-lg text-sm text-chef-muted hover:text-chef-platinum hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleClearAll}
+                  disabled={clearing}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                  data-testid="watchlist-clear-confirm-btn"
+                >
+                  {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Clear All
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search to add */}
       <div className="relative mb-6">

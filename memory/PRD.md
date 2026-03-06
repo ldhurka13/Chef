@@ -110,10 +110,12 @@ Build a context-aware movie recommendation engine called "Chef" with:
     - [x] Multiple watches per movie (each with rating, date, comment)
     - [x] "First Watch" / "Re-watch #N" labels, descending order (latest first)
     - [x] Inline edit & delete per watch; deleting last watch removes movie from diary
+    - [x] **Clear All** - Bulk delete all diary entries with confirmation modal
   - [x] **Watchlist** - Search & add movies to watch later, remove from watchlist
+    - [x] **Clear All** - Bulk delete all watchlist entries with confirmation modal
   - [x] **Profile** - Top 5 Favorite Movies (user-chosen, auto-saves), auto-ranked Top Genres/Actors/Directors (read-only, computed from diary via TMDB)
     - [x] **Preference-Based Scoring** - Profile insights use "preference score" (user rating vs. Bayesian-adjusted IMDB rating)
-    - [x] **Percentage Display** - Shows green ▲ x% format indicating how much higher the user rates items vs. average
+    - [x] **Percentage Display** - Shows green ▲ x.xx% format indicating how much higher the user rates items vs. average
 - [x] **Letterboxd Import**: ZIP + CSV support; ratings.csv → Diary (5→10 scale via S-curve), reviews.csv → comments, watchlist.csv → Watchlist. Orange "LB" badge on imported items
   - [x] **Non-Linear Rating Conversion** - S-curve function for nuanced Letterboxd → 10-point scale conversion
 - [x] Password reset via Resend email API
