@@ -126,7 +126,12 @@ function AppContent() {
           res = await axios.get(`${API}/movies/sections/all-time-classics`);
           break;
         case "explore":
-          res = await axios.get(`${API}/movies/sections/explore`);
+          // Use personalized explore endpoint if logged in
+          if (token) {
+            res = await axios.get(`${API}/movies/explore-for-you`, { headers: authHeader });
+          } else {
+            res = await axios.get(`${API}/movies/sections/explore`);
+          }
           break;
         case "marathon":
           res = await axios.get(`${API}/movies/sections/marathon`);
