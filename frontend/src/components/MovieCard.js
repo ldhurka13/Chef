@@ -60,25 +60,23 @@ const MovieCard = ({ movie, onClick, index }) => {
 
       {/* Content */}
       <div className="absolute bottom-0 left-0 right-0 p-4">
-        {/* Match Percentage or Curated Score - Always Visible */}
-        {(movie.match_percentage || movie.curated_score) && (
-          <div className="mb-2">
-            <span className="inline-block px-2 py-1 rounded-full bg-chef-teal/20 
-                           text-chef-teal font-sans text-sm font-medium
-                           border border-chef-teal/30">
-              {movie.curated_score ? `${Math.min(100, Math.round(movie.curated_score))}%` : `${movie.match_percentage}%`} Match
-            </span>
-          </div>
-        )}
-
-        {/* Watchlist Badge */}
-        {movie.in_watchlist && (
-          <div className="absolute top-3 left-3">
-            <span className="inline-block px-2 py-1 rounded-full bg-amber-500/20 
-                           text-amber-400 font-sans text-xs font-medium
-                           border border-amber-500/30">
-              Watchlist
-            </span>
+        {/* Match Percentage and Watchlist Badges - Side by Side */}
+        {(movie.match_percentage || movie.curated_score || movie.in_watchlist) && (
+          <div className="mb-2 flex items-center gap-2 flex-wrap">
+            {(movie.match_percentage || movie.curated_score) && (
+              <span className="inline-block px-2 py-1 rounded-full bg-chef-teal/20 
+                             text-chef-teal font-sans text-sm font-medium
+                             border border-chef-teal/30">
+                {movie.curated_score ? `${Math.min(100, Math.round(movie.curated_score))}%` : `${movie.match_percentage}%`} Match
+              </span>
+            )}
+            {movie.in_watchlist && (
+              <span className="inline-block px-2 py-1 rounded-full bg-amber-500/20 
+                             text-amber-400 font-sans text-xs font-medium
+                             border border-amber-500/30">
+                Watchlist
+              </span>
+            )}
           </div>
         )}
 
