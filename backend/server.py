@@ -1154,6 +1154,8 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
         
         await tmdb_client.aclose()
         
+        await _invalidate_insights_cache(current_user["id"])
+        
         return {
             "message": f"Letterboxd import complete: {stats['diary_added']} diary entries, {stats['watchlist_added']} watchlist items",
             "stats": stats
@@ -1340,6 +1342,7 @@ async def add_to_watch_history(item: WatchHistoryCreate, current_user: dict = De
             {"user_id": current_user["id"], "tmdb_id": item.tmdb_id},
             {"_id": 0}
         )
+        await _invalidate_insights_cache(current_user["id"])
         return updated
     
     # Create new entry
@@ -1357,6 +1360,7 @@ async def add_to_watch_history(item: WatchHistoryCreate, current_user: dict = De
     }
     await db.watch_history.insert_one(doc)
     doc.pop("_id", None)
+    await _invalidate_insights_cache(current_user["id"])
     return doc
 
 @api_router.put("/user/watch-history/{tmdb_id}")
@@ -1410,6 +1414,7 @@ async def remove_from_watch_history(tmdb_id: int, current_user: dict = Depends(g
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Movie not in watch history")
     
+    await _invalidate_insights_cache(current_user["id"])
     return {"message": "Removed from watch history"}
 
 # ============ INDIVIDUAL WATCH ENTRY ENDPOINTS ============
@@ -1502,6 +1507,7 @@ async def update_watch_entry(tmdb_id: int, watch_id: str, entry: WatchEntryUpdat
         {"user_id": current_user["id"], "tmdb_id": tmdb_id},
         {"_id": 0}
     )
+    await _invalidate_insights_cache(current_user["id"])
     return updated
 
 @api_router.delete("/user/watch-history/{tmdb_id}/watches/{watch_id}")
@@ -1524,10 +1530,10 @@ async def delete_watch_entry(tmdb_id: int, watch_id: str, current_user: dict = D
         raise HTTPException(status_code=404, detail="Watch entry not found")
     
     if not new_watches:
-        # Last watch removed — delete the entire movie from history
         await db.watch_history.delete_one(
             {"user_id": current_user["id"], "tmdb_id": tmdb_id}
         )
+        await _invalidate_insights_cache(current_user["id"])
         return {"message": "Movie removed from history (last watch deleted)", "removed": True}
     
     summary = _sync_watch_summary(new_watches)
@@ -1541,15 +1547,79 @@ async def delete_watch_entry(tmdb_id: int, watch_id: str, current_user: dict = D
         {"user_id": current_user["id"], "tmdb_id": tmdb_id},
         {"_id": 0}
     )
+    await _invalidate_insights_cache(current_user["id"])
     return updated
 
-# ============ PROFILE INSIGHTS ENDPOINT ============
+# ============ PROFILE INSIGHTS (CACHED) ============
+
+async def _get_movie_metadata(tmdb_ids: list) -> dict:
+    """Get genres/cast/crew for movies, using MongoDB cache first, TMDB API for misses."""
+    result = {}
+    
+    # Batch read from cache
+    cached = await db.movie_metadata.find(
+        {"tmdb_id": {"$in": tmdb_ids}},
+        {"_id": 0}
+    ).to_list(len(tmdb_ids))
+    for doc in cached:
+        result[doc["tmdb_id"]] = doc
+    
+    # Find cache misses
+    missing = [tid for tid in tmdb_ids if tid not in result]
+    if not missing:
+        return result
+    
+    # Fetch from TMDB concurrently
+    tmdb_api_key = os.environ.get("TMDB_API_KEY", "")
+    sem = asyncio.Semaphore(15)
+    
+    async def fetch_and_cache(tmdb_id):
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    dr, cr = await asyncio.gather(
+                        client.get(f"https://api.themoviedb.org/3/movie/{tmdb_id}", params={"api_key": tmdb_api_key}),
+                        client.get(f"https://api.themoviedb.org/3/movie/{tmdb_id}/credits", params={"api_key": tmdb_api_key}),
+                    )
+                details = dr.json() if dr.status_code == 200 else {}
+                credits = cr.json() if cr.status_code == 200 else {}
+                
+                genres = [{"id": g["id"], "name": g["name"]} for g in details.get("genres", [])]
+                cast = [{"name": a["name"], "profile_path": a.get("profile_path")} for a in (credits.get("cast") or [])[:5]]
+                directors = [{"name": c["name"], "profile_path": c.get("profile_path")} for c in (credits.get("crew") or []) if c.get("job") == "Director"]
+                
+                doc = {"tmdb_id": tmdb_id, "genres": genres, "cast": cast, "directors": directors}
+                await db.movie_metadata.update_one(
+                    {"tmdb_id": tmdb_id}, {"$set": doc}, upsert=True
+                )
+                return doc
+            except Exception:
+                return {"tmdb_id": tmdb_id, "genres": [], "cast": [], "directors": []}
+    
+    fetched = await asyncio.gather(*[fetch_and_cache(tid) for tid in missing])
+    for doc in fetched:
+        result[doc["tmdb_id"]] = doc
+    
+    return result
+
+
+async def _invalidate_insights_cache(user_id: str):
+    """Call this whenever diary changes to bust the insights cache."""
+    await db.profile_insights_cache.delete_one({"user_id": user_id})
+
 
 @api_router.get("/user/profile-insights")
 async def get_profile_insights(current_user: dict = Depends(get_current_user)):
-    """Compute top 5 genres, actors, directors from user's watch history + favorites"""
+    """Return cached top 5 genres, actors, directors. Recomputes only when diary changes."""
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Check user-level cache first
+    cached = await db.profile_insights_cache.find_one(
+        {"user_id": current_user["id"]}, {"_id": 0}
+    )
+    if cached:
+        return {"genres": cached["genres"], "actors": cached["actors"], "directors": cached["directors"]}
     
     # Get diary entries
     history = await db.watch_history.find(
@@ -1560,55 +1630,31 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     if not history:
         return {"genres": [], "actors": [], "directors": []}
     
-    # Fetch TMDB details + credits concurrently for all diary movies
-    tmdb_api_key = os.environ.get("TMDB_API_KEY", "")
-    sem = asyncio.Semaphore(15)
-    
-    async def fetch_movie_data(tmdb_id: int):
-        async with sem:
-            try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    details_resp, credits_resp = await asyncio.gather(
-                        client.get(f"https://api.themoviedb.org/3/movie/{tmdb_id}", params={"api_key": tmdb_api_key}),
-                        client.get(f"https://api.themoviedb.org/3/movie/{tmdb_id}/credits", params={"api_key": tmdb_api_key}),
-                    )
-                    details = details_resp.json() if details_resp.status_code == 200 else {}
-                    credits = credits_resp.json() if credits_resp.status_code == 200 else {}
-                    return {"details": details, "credits": credits}
-            except Exception:
-                return {"details": {}, "credits": {}}
-    
-    results = await asyncio.gather(*[fetch_movie_data(h["tmdb_id"]) for h in history])
+    # Get movie metadata (cached in MongoDB)
+    tmdb_ids = [h["tmdb_id"] for h in history]
+    metadata = await _get_movie_metadata(tmdb_ids)
     
     # Score computation
-    genre_scores = {}   # genre_name -> {"total_rating": float, "count": int}
-    actor_scores = {}   # actor_name -> {"total_rating": float, "count": int, "profile_path": str}
-    director_scores = {}  # director_name -> {"total_rating": float, "count": int, "profile_path": str}
+    genre_scores = {}
+    actor_scores = {}
+    director_scores = {}
     
-    for h, tmdb_data in zip(history, results):
-        # Use average rating from watches, fallback to user_rating
+    for h in history:
         watches = h.get("watches", [])
-        if watches:
-            avg_rating = sum(w.get("rating", 0) for w in watches) / len(watches)
-        else:
-            avg_rating = h.get("user_rating", 5.0)
-        
+        avg_rating = (sum(w.get("rating", 0) for w in watches) / len(watches)) if watches else h.get("user_rating", 5.0)
         watch_count = h.get("watch_count", 1) or 1
-        weight = avg_rating * (1 + 0.1 * (watch_count - 1))  # Slight boost for rewatches
+        weight = avg_rating * (1 + 0.1 * (watch_count - 1))
         
-        details = tmdb_data["details"]
-        credits = tmdb_data["credits"]
+        meta = metadata.get(h["tmdb_id"], {})
         
-        # Genres
-        for genre in details.get("genres", []):
+        for genre in meta.get("genres", []):
             name = genre["name"]
             if name not in genre_scores:
                 genre_scores[name] = {"total_weight": 0, "count": 0}
             genre_scores[name]["total_weight"] += weight
             genre_scores[name]["count"] += 1
         
-        # Top-billed actors (first 5)
-        for actor in (credits.get("cast") or [])[:5]:
+        for actor in meta.get("cast", []):
             name = actor.get("name", "")
             if not name:
                 continue
@@ -1617,18 +1663,15 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
             actor_scores[name]["total_weight"] += weight
             actor_scores[name]["count"] += 1
         
-        # Directors
-        for crew in (credits.get("crew") or []):
-            if crew.get("job") == "Director":
-                name = crew.get("name", "")
-                if not name:
-                    continue
-                if name not in director_scores:
-                    director_scores[name] = {"total_weight": 0, "count": 0, "profile_path": crew.get("profile_path")}
-                director_scores[name]["total_weight"] += weight
-                director_scores[name]["count"] += 1
+        for director in meta.get("directors", []):
+            name = director.get("name", "")
+            if not name:
+                continue
+            if name not in director_scores:
+                director_scores[name] = {"total_weight": 0, "count": 0, "profile_path": director.get("profile_path")}
+            director_scores[name]["total_weight"] += weight
+            director_scores[name]["count"] += 1
     
-    # Rank and return top 5
     def rank(scores_dict, limit=5):
         ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
         return [
@@ -1642,11 +1685,20 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
             for name, data in ranked[:limit]
         ]
     
-    return {
+    result = {
         "genres": rank(genre_scores),
         "actors": rank(actor_scores),
         "directors": rank(director_scores),
     }
+    
+    # Cache the result
+    await db.profile_insights_cache.update_one(
+        {"user_id": current_user["id"]},
+        {"$set": {"user_id": current_user["id"], **result}},
+        upsert=True
+    )
+    
+    return result
 
 # ============ WATCHLIST ENDPOINTS ============
 
