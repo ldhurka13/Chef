@@ -900,19 +900,19 @@ const ProfileTab = ({ user, onUserUpdate }) => {
       return <p className="text-sm text-chef-muted/40 ml-1">Not enough watch data yet</p>;
     }
     
-    // Helper to format preference as percentage
+    // Helper to format preference as percentage with 2 decimal places
     const formatPreference = (avgPreference, avgExpected) => {
       if (avgPreference === undefined || avgExpected === undefined || avgExpected === 0) return null;
       // Percentage increase = (preference / expected) * 100
       const percentChange = (avgPreference / avgExpected) * 100;
-      return Math.abs(percentChange).toFixed(0);
+      return Math.abs(percentChange).toFixed(2);
     };
 
     return (
       <div className="space-y-2">
         {items.map((item, idx) => {
           const percentValue = formatPreference(item.avg_preference, item.avg_expected);
-          const isPositive = item.avg_preference >= 0;
+          const isPositive = item.avg_preference !== undefined ? item.avg_preference >= 0 : true;
           
           return (
             <div
@@ -932,7 +932,7 @@ const ProfileTab = ({ user, onUserUpdate }) => {
                 <p className="text-sm text-chef-platinum font-medium truncate">{item.name}</p>
                 <p className="text-xs text-chef-muted">
                   {item.count} movie{item.count !== 1 ? "s" : ""}
-                  {percentValue && (
+                  {percentValue !== null && (
                     <span className={`ml-2 inline-flex items-center gap-0.5 ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
                       <span className="text-[10px]">{isPositive ? "▲" : "▼"}</span>
                       {percentValue}%
