@@ -118,6 +118,11 @@ Build a context-aware movie recommendation engine called "Chef" with:
     - [x] **Percentage Display** - Shows green ▲ x.xx% format indicating how much higher the user rates items vs. average
 - [x] **Letterboxd Import**: ZIP + CSV support; ratings.csv → Diary (5→10 scale via S-curve), reviews.csv → comments, watchlist.csv → Watchlist. Orange "LB" badge on imported items
   - [x] **Non-Linear Rating Conversion** - S-curve function for nuanced Letterboxd → 10-point scale conversion
+  - [x] **Familiarity-Based Adjustment** - Ratings are adjusted based on user's viewing history:
+    - Calculates familiarity scores for genres, directors, and actors from existing watch history
+    - Movies in genres/by directors/with actors the user has watched more get amplified ratings
+    - Weights: Directors 40%, Genres 35%, Actors 25%
+    - Max adjustment: ±10% of deviation from neutral (5.0)
 - [x] Password reset via Resend email API
 
 ## Future Tasks (P2)

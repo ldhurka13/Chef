@@ -781,10 +781,18 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     
     return {"avatar_url": avatar_url}
 
-def letterboxd_to_chef_rating(lb_rating: float) -> float:
-    """Non-linear Letterboxd (0-5) to Chef (0-10) conversion.
+def letterboxd_to_chef_rating(lb_rating: float, familiarity_boost: float = 0.0) -> float:
+    """Non-linear Letterboxd (0-5) to Chef (0-10) conversion with familiarity adjustment.
+    
     S-curve: compresses low ratings (1.5 and below), amplifies high ratings (3.5+).
     Midpoint (2.5/5) maps to 5.0/10 (same as linear).
+    
+    Familiarity boost: When user has watched more content from similar genres/directors/actors,
+    the rating is adjusted slightly (up to ±0.5 points). Higher familiarity = more weight to user's taste.
+    
+    Args:
+        lb_rating: Letterboxd rating (0-5 scale)
+        familiarity_boost: Adjustment factor from -1.0 to 1.0 based on viewing history
     """
     if lb_rating is None or lb_rating <= 0:
         return 0.0
@@ -798,7 +806,142 @@ def letterboxd_to_chef_rating(lb_rating: float) -> float:
         # Upper half: stretch with exponent < 1
         normalized = (lb_rating - mid) / (5.0 - mid)  # 0.0 - 1.0
         chef = 5.0 + 5.0 * (normalized ** 0.6)
+    
+    # Apply familiarity adjustment (max ±0.5 points)
+    # Higher familiarity amplifies deviations from neutral (5.0)
+    if familiarity_boost != 0:
+        deviation = chef - 5.0  # How far from neutral
+        # Boost proportional to deviation and familiarity
+        adjustment = deviation * familiarity_boost * 0.1  # Max 10% boost
+        chef += adjustment
+    
     return round(max(0.0, min(10.0, chef)), 1)
+
+
+async def calculate_familiarity_scores(user_id: str) -> dict:
+    """Calculate familiarity scores for genres, directors, and actors based on user's watch history.
+    
+    Returns dict with:
+        - genres: {genre_name: count}
+        - directors: {director_name: count}
+        - actors: {actor_name: count}
+        - max_genre_count, max_director_count, max_actor_count for normalization
+    """
+    # Get user's existing watch history
+    history = await db.watch_history.find(
+        {"user_id": user_id},
+        {"_id": 0, "tmdb_id": 1}
+    ).to_list(1000)
+    
+    if not history:
+        return {
+            "genres": {}, "directors": {}, "actors": {},
+            "max_genre_count": 0, "max_director_count": 0, "max_actor_count": 0
+        }
+    
+    tmdb_ids = [h["tmdb_id"] for h in history]
+    
+    # Get cached metadata for these movies
+    cached_movies = await db.tmdb_cache.find(
+        {"tmdb_id": {"$in": tmdb_ids}},
+        {"_id": 0, "tmdb_id": 1, "genres": 1, "cast": 1, "directors": 1}
+    ).to_list(1000)
+    
+    genre_counts = {}
+    director_counts = {}
+    actor_counts = {}
+    
+    for movie in cached_movies:
+        # Count genres
+        for genre in movie.get("genres", []):
+            name = genre.get("name") if isinstance(genre, dict) else genre
+            if name:
+                genre_counts[name] = genre_counts.get(name, 0) + 1
+        
+        # Count directors
+        for director in movie.get("directors", []):
+            name = director.get("name") if isinstance(director, dict) else director
+            if name:
+                director_counts[name] = director_counts.get(name, 0) + 1
+        
+        # Count top actors (first 5)
+        for actor in movie.get("cast", [])[:5]:
+            name = actor.get("name") if isinstance(actor, dict) else actor
+            if name:
+                actor_counts[name] = actor_counts.get(name, 0) + 1
+    
+    return {
+        "genres": genre_counts,
+        "directors": director_counts,
+        "actors": actor_counts,
+        "max_genre_count": max(genre_counts.values()) if genre_counts else 0,
+        "max_director_count": max(director_counts.values()) if director_counts else 0,
+        "max_actor_count": max(actor_counts.values()) if actor_counts else 0
+    }
+
+
+def compute_familiarity_boost(movie_metadata: dict, familiarity_data: dict) -> float:
+    """Compute familiarity boost for a movie based on user's viewing history.
+    
+    Returns a value between 0.0 and 1.0 representing how familiar the user is
+    with this type of content (genres, directors, actors).
+    """
+    if not familiarity_data or not movie_metadata:
+        return 0.0
+    
+    genre_scores = familiarity_data.get("genres", {})
+    director_scores = familiarity_data.get("directors", {})
+    actor_scores = familiarity_data.get("actors", {})
+    
+    max_genre = familiarity_data.get("max_genre_count", 1) or 1
+    max_director = familiarity_data.get("max_director_count", 1) or 1
+    max_actor = familiarity_data.get("max_actor_count", 1) or 1
+    
+    # Calculate genre familiarity (average of matching genres, normalized)
+    movie_genres = movie_metadata.get("genres", [])
+    genre_familiarity = 0.0
+    if movie_genres:
+        genre_matches = []
+        for g in movie_genres:
+            name = g.get("name") if isinstance(g, dict) else g
+            if name and name in genre_scores:
+                genre_matches.append(genre_scores[name] / max_genre)
+        if genre_matches:
+            genre_familiarity = sum(genre_matches) / len(genre_matches)
+    
+    # Calculate director familiarity
+    movie_directors = movie_metadata.get("directors", [])
+    director_familiarity = 0.0
+    if movie_directors:
+        dir_matches = []
+        for d in movie_directors:
+            name = d.get("name") if isinstance(d, dict) else d
+            if name and name in director_scores:
+                dir_matches.append(director_scores[name] / max_director)
+        if dir_matches:
+            director_familiarity = max(dir_matches)  # Use highest match for directors
+    
+    # Calculate actor familiarity (top 5 cast)
+    movie_cast = movie_metadata.get("cast", [])[:5]
+    actor_familiarity = 0.0
+    if movie_cast:
+        actor_matches = []
+        for a in movie_cast:
+            name = a.get("name") if isinstance(a, dict) else a
+            if name and name in actor_scores:
+                actor_matches.append(actor_scores[name] / max_actor)
+        if actor_matches:
+            actor_familiarity = sum(actor_matches) / len(actor_matches)
+    
+    # Weighted combination: directors count most, then genres, then actors
+    # Weights: director 40%, genre 35%, actors 25%
+    total_familiarity = (
+        director_familiarity * 0.40 +
+        genre_familiarity * 0.35 +
+        actor_familiarity * 0.25
+    )
+    
+    return min(1.0, total_familiarity)
 
 
 @api_router.post("/auth/import-letterboxd")
@@ -928,6 +1071,9 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
     stats = {"diary_added": 0, "diary_updated": 0, "watchlist_added": 0, "skipped": 0, "total_processed": 0}
     
     if is_zip:
+        # Calculate user's familiarity scores BEFORE processing new imports
+        familiarity_data = await calculate_familiarity_scores(current_user["id"])
+        
         # Pre-fetch all unique movies from TMDB in parallel
         unique_movies = {}
         for row in ratings_rows:
@@ -956,6 +1102,42 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
                 for title, year in unique_movies.values()
             ])
         
+        # Helper to get movie metadata for familiarity calculation
+        async def get_movie_metadata(tmdb_id: int) -> dict:
+            """Fetch movie metadata from cache or TMDB for familiarity calculation"""
+            cached = await db.tmdb_cache.find_one({"tmdb_id": tmdb_id}, {"_id": 0})
+            if cached and cached.get("genres"):
+                return cached
+            
+            # Fetch from TMDB if not cached
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"https://api.themoviedb.org/3/movie/{tmdb_id}",
+                        params={"api_key": TMDB_API_KEY, "append_to_response": "credits"}
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        genres = data.get("genres", [])
+                        credits = data.get("credits", {})
+                        cast = [{"name": c["name"], "profile_path": c.get("profile_path")} 
+                                for c in credits.get("cast", [])[:10]]
+                        directors = [{"name": c["name"], "profile_path": c.get("profile_path")} 
+                                     for c in credits.get("crew", []) if c.get("job") == "Director"]
+                        
+                        metadata = {"tmdb_id": tmdb_id, "genres": genres, "cast": cast, "directors": directors}
+                        
+                        # Cache the metadata
+                        await db.tmdb_cache.update_one(
+                            {"tmdb_id": tmdb_id},
+                            {"$set": metadata},
+                            upsert=True
+                        )
+                        return metadata
+            except Exception:
+                pass
+            return {}
+        
         # Build review lookup: (name, year) -> review text
         review_map = {}
         for row in reviews_rows:
@@ -978,20 +1160,24 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
             stats["total_processed"] += 1
             year_val = int(year_str) if year_str.isdigit() else None
             
-            # Convert 0-5 rating to 0-10
+            # Search TMDB first to get tmdb_id for metadata lookup
+            tmdb = await search_tmdb_movie(name, year_val)
+            if not tmdb:
+                stats["skipped"] += 1
+                continue
+            
+            # Get movie metadata for familiarity calculation
+            movie_metadata = await get_movie_metadata(tmdb["tmdb_id"])
+            familiarity_boost = compute_familiarity_boost(movie_metadata, familiarity_data)
+            
+            # Convert 0-5 rating to 0-10 with familiarity adjustment
             try:
-                rating_10 = letterboxd_to_chef_rating(float(rating_str)) if rating_str else 7.0
+                rating_10 = letterboxd_to_chef_rating(float(rating_str), familiarity_boost) if rating_str else 7.0
             except ValueError:
                 rating_10 = 7.0
             
             # Look up review
             comment = review_map.get((name.lower(), year_val), "")
-            
-            # Search TMDB
-            tmdb = await search_tmdb_movie(name, year_val)
-            if not tmdb:
-                stats["skipped"] += 1
-                continue
             
             # Check if already in diary
             existing = await db.watch_history.find_one(
@@ -1060,15 +1246,20 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
                 continue  # Already processed with rating
             
             stats["total_processed"] += 1
-            try:
-                rating_10 = letterboxd_to_chef_rating(float(rating_str)) if rating_str else 7.0
-            except ValueError:
-                rating_10 = 7.0
             
             tmdb = await search_tmdb_movie(name, year_val)
             if not tmdb:
                 stats["skipped"] += 1
                 continue
+            
+            # Get movie metadata for familiarity calculation
+            movie_metadata = await get_movie_metadata(tmdb["tmdb_id"])
+            familiarity_boost = compute_familiarity_boost(movie_metadata, familiarity_data)
+            
+            try:
+                rating_10 = letterboxd_to_chef_rating(float(rating_str), familiarity_boost) if rating_str else 7.0
+            except ValueError:
+                rating_10 = 7.0
             
             existing = await db.watch_history.find_one(
                 {"user_id": current_user["id"], "tmdb_id": tmdb["tmdb_id"]},
