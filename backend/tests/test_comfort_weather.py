@@ -13,7 +13,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://watchlist-diary.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://diary-watch.preview.emergentagent.com')
 
 # Location coordinates for testing
 NYC_LAT = 40.7128

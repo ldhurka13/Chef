@@ -112,10 +112,14 @@ Build a context-aware movie recommendation engine called "Chef" with:
     - [x] Inline edit & delete per watch; deleting last watch removes movie from diary
   - [x] **Watchlist** - Search & add movies to watch later, remove from watchlist
   - [x] **Profile** - Top 5 Favorite Movies (user-chosen, auto-saves), auto-ranked Top Genres/Actors/Directors (read-only, computed from diary via TMDB)
-- [x] **Letterboxd Import**: ZIP + CSV support; ratings.csv → Diary (5→10 scale), reviews.csv → comments, watchlist.csv → Watchlist. Orange "LB" badge on imported items
+    - [x] **Preference-Based Scoring** - Profile insights use "preference score" (user rating vs. Bayesian-adjusted IMDB rating)
+    - [x] **Percentage Display** - Shows green ▲ x% format indicating how much higher the user rates items vs. average
+- [x] **Letterboxd Import**: ZIP + CSV support; ratings.csv → Diary (5→10 scale via S-curve), reviews.csv → comments, watchlist.csv → Watchlist. Orange "LB" badge on imported items
+  - [x] **Non-Linear Rating Conversion** - S-curve function for nuanced Letterboxd → 10-point scale conversion
 - [x] Password reset via Resend email API
 
 ## Future Tasks (P2)
 - [ ] Refine Recommendation Algorithm - Rewatchability Multiplier, Complexity Penalty
+- [ ] JustWatch API Integration - Replace/augment MoviesOfTheNight for streaming availability
 - [ ] Refactor App.js into React Context providers
 - [ ] Split backend/server.py into routers, models, services

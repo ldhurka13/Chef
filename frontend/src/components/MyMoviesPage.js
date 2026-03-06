@@ -899,35 +899,50 @@ const ProfileTab = ({ user, onUserUpdate }) => {
     if (!items || items.length === 0) {
       return <p className="text-sm text-chef-muted/40 ml-1">Not enough watch data yet</p>;
     }
+    
+    // Helper to format preference as percentage
+    const formatPreference = (avgPreference, avgExpected) => {
+      if (avgPreference === undefined || avgExpected === undefined || avgExpected === 0) return null;
+      // Percentage increase = (preference / expected) * 100
+      const percentChange = (avgPreference / avgExpected) * 100;
+      return Math.abs(percentChange).toFixed(0);
+    };
+
     return (
       <div className="space-y-2">
-        {items.map((item, idx) => (
-          <div
-            key={item.name}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5"
-            data-testid={`ranked-item-${idx}`}
-          >
-            <span className="text-lg font-serif text-chef-muted/30 w-6 text-center flex-shrink-0">{idx + 1}</span>
-            {showImage && item.profile_path ? (
-              <img src={`${TMDB_IMG}w45${item.profile_path}`} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-            ) : showImage ? (
-              <div className="w-8 h-8 rounded-full bg-chef-bg flex-shrink-0 flex items-center justify-center">
-                <User className="w-3.5 h-3.5 text-chef-muted/30" />
+        {items.map((item, idx) => {
+          const percentValue = formatPreference(item.avg_preference, item.avg_expected);
+          const isPositive = item.avg_preference >= 0;
+          
+          return (
+            <div
+              key={item.name}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5"
+              data-testid={`ranked-item-${idx}`}
+            >
+              <span className="text-lg font-serif text-chef-muted/30 w-6 text-center flex-shrink-0">{idx + 1}</span>
+              {showImage && item.profile_path ? (
+                <img src={`${TMDB_IMG}w45${item.profile_path}`} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+              ) : showImage ? (
+                <div className="w-8 h-8 rounded-full bg-chef-bg flex-shrink-0 flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-chef-muted/30" />
+                </div>
+              ) : null}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-chef-platinum font-medium truncate">{item.name}</p>
+                <p className="text-xs text-chef-muted">
+                  {item.count} movie{item.count !== 1 ? "s" : ""}
+                  {percentValue && (
+                    <span className={`ml-2 inline-flex items-center gap-0.5 ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+                      <span className="text-[10px]">{isPositive ? "▲" : "▼"}</span>
+                      {percentValue}%
+                    </span>
+                  )}
+                </p>
               </div>
-            ) : null}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-chef-platinum font-medium truncate">{item.name}</p>
-              <p className="text-xs text-chef-muted">
-                {item.count} movie{item.count !== 1 ? "s" : ""}
-                {item.avg_preference !== undefined && (
-                  <span className={item.avg_preference >= 0 ? "text-chef-teal" : "text-red-400"}>
-                    {" "}&middot; {item.avg_preference >= 0 ? "+" : ""}{item.avg_preference} vs avg
-                  </span>
-                )}
-              </p>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };

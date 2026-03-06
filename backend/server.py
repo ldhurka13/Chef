@@ -647,7 +647,7 @@ async def forgot_password(data: ForgotPasswordRequest):
     )
     
     # Build reset URL
-    frontend_url = os.environ.get("FRONTEND_URL", "https://watchlist-diary.preview.emergentagent.com")
+    frontend_url = os.environ.get("FRONTEND_URL", "https://diary-watch.preview.emergentagent.com")
     reset_url = f"{frontend_url}/reset-password?token={reset_token}"
     
     # Send email via Resend
@@ -1771,30 +1771,33 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
         for genre in meta.get("genres", []):
             name = genre["name"]
             if name not in genre_scores:
-                genre_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0}
+                genre_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "total_expected": 0}
             genre_scores[name]["total_weight"] += weight
             genre_scores[name]["count"] += 1
             genre_scores[name]["total_pref"] += preference
+            genre_scores[name]["total_expected"] += expected
         
         for actor in meta.get("cast", []):
             name = actor.get("name", "")
             if not name:
                 continue
             if name not in actor_scores:
-                actor_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "profile_path": actor.get("profile_path")}
+                actor_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "total_expected": 0, "profile_path": actor.get("profile_path")}
             actor_scores[name]["total_weight"] += weight
             actor_scores[name]["count"] += 1
             actor_scores[name]["total_pref"] += preference
+            actor_scores[name]["total_expected"] += expected
         
         for director in meta.get("directors", []):
             name = director.get("name", "")
             if not name:
                 continue
             if name not in director_scores:
-                director_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "profile_path": director.get("profile_path")}
+                director_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "total_expected": 0, "profile_path": director.get("profile_path")}
             director_scores[name]["total_weight"] += weight
             director_scores[name]["count"] += 1
             director_scores[name]["total_pref"] += preference
+            director_scores[name]["total_expected"] += expected
     
     def rank(scores_dict, limit=5):
         ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
@@ -1804,6 +1807,7 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
                 "score": round(data["total_weight"], 1),
                 "count": data["count"],
                 "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
+                "avg_expected": round(data["total_expected"] / data["count"], 1) if data["count"] else 0,
                 "profile_path": data.get("profile_path"),
             }
             for name, data in ranked[:limit]
