@@ -1214,25 +1214,69 @@ async def get_letterboxd_data(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/movies/search-tmdb")
 async def search_tmdb_movies(query: str):
-    """Search TMDB for movies (for favorite movie picker)"""
+    """Search movies — local IMDB DB first, TMDB fallback for misses"""
     if not query or len(query) < 2:
         return {"results": []}
     
-    data = tmdb_request("/search/movie", {"query": query, "language": "en-US", "page": 1})
-    if not data:
-        return {"results": []}
+    # 1) Search local IMDB database (fast — indexed)
+    local_results = await db.movies.find(
+        {"$text": {"$search": query}},
+        {"_id": 0, "score": {"$meta": "textScore"}}
+    ).sort("score", {"$meta": "textScore"}).limit(8).to_list(8)
     
     results = []
-    for movie in data.get("results", [])[:8]:
+    seen_titles = set()
+    
+    for m in local_results:
+        key = f"{m['title'].lower()}|{m.get('year')}"
+        if key in seen_titles:
+            continue
+        seen_titles.add(key)
         results.append({
-            "id": movie["id"],
-            "title": movie.get("title", ""),
-            "year": movie.get("release_date", "")[:4] if movie.get("release_date") else "",
-            "poster_url": get_image_url(movie.get("poster_path"), "w185"),
-            "rating": round(movie.get("vote_average", 0), 1)
+            "id": m.get("imdb_id") or f"local_{m['title_lower']}_{m.get('year','')}",
+            "title": m["title"],
+            "year": str(m.get("year", "")),
+            "poster_url": None,
+            "rating": m.get("imdb_rating"),
+            "source": "local"
         })
     
-    return {"results": results}
+    # 2) Supplement with TMDB if not enough results
+    if len(results) < 6:
+        data = tmdb_request("/search/movie", {"query": query, "language": "en-US", "page": 1})
+        if data:
+            for movie in data.get("results", [])[:8]:
+                title = movie.get("title", "")
+                year = movie.get("release_date", "")[:4] if movie.get("release_date") else ""
+                key = f"{title.lower()}|{year}"
+                if key in seen_titles:
+                    # Enrich existing local result with TMDB poster
+                    for r in results:
+                        if f"{r['title'].lower()}|{r['year']}" == key and not r.get("poster_url"):
+                            r["poster_url"] = get_image_url(movie.get("poster_path"), "w185")
+                            r["id"] = movie["id"]  # Use TMDB ID for detail lookups
+                    continue
+                seen_titles.add(key)
+                results.append({
+                    "id": movie["id"],
+                    "title": title,
+                    "year": year,
+                    "poster_url": get_image_url(movie.get("poster_path"), "w185"),
+                    "rating": round(movie.get("vote_average", 0), 1),
+                    "source": "tmdb"
+                })
+    
+    # 3) Backfill posters for local results that don't have them (quick TMDB lookup)
+    for r in results:
+        if not r.get("poster_url") and r.get("title"):
+            data = tmdb_request("/search/movie", {"query": r["title"], "year": r.get("year"), "language": "en-US", "page": 1})
+            if data and data.get("results"):
+                tmdb_match = data["results"][0]
+                r["poster_url"] = get_image_url(tmdb_match.get("poster_path"), "w185")
+                if not isinstance(r["id"], int):
+                    r["id"] = tmdb_match["id"]
+    
+    return {"results": results[:8]}
 
 # User endpoints
 @api_router.get("/user/profile")
@@ -2602,6 +2646,16 @@ async def get_movie_details(movie_id: int):
             in_history = True
             user_rating = history_entry.get("user_rating")
     
+    # Enrich with local IMDB data
+    title = data.get("title", "")
+    year = int(data.get("release_date", "0000")[:4]) if data.get("release_date") else None
+    local_movie = None
+    if title and year:
+        local_movie = await db.movies.find_one(
+            {"title_lower": title.lower(), "year": year},
+            {"_id": 0}
+        )
+    
     return {
         "id": data.get("id"),
         "title": data.get("title"),
@@ -2631,7 +2685,17 @@ async def get_movie_details(movie_id: int):
                 "poster_url": get_image_url(m.get("poster_path"), "w342")
             }
             for m in data.get("similar", {}).get("results", [])[:6]
-        ]
+        ],
+        # Local IMDB enrichment
+        "imdb_rating": local_movie.get("imdb_rating") if local_movie else None,
+        "imdb_votes": local_movie.get("imdb_votes") if local_movie else None,
+        "meta_score": local_movie.get("meta_score") if local_movie else None,
+        "budget": local_movie.get("budget") if local_movie else None,
+        "gross_worldwide": local_movie.get("gross_worldwide") if local_movie else None,
+        "gross_us_canada": local_movie.get("gross_us_canada") if local_movie else None,
+        "awards": local_movie.get("awards") if local_movie else None,
+        "mpa": local_movie.get("mpa") if local_movie else None,
+        "imdb_description": local_movie.get("description") if local_movie else None,
     }
 
 # ============ STREAMING AVAILABILITY ============

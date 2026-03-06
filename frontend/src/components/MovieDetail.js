@@ -230,10 +230,28 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry })
 
                         {/* Meta */}
                         <div className="flex flex-wrap items-center gap-4 mb-6 text-chef-muted">
+                          {details?.imdb_rating && (
+                            <div className="flex items-center gap-1" data-testid="imdb-rating">
+                              <Star className="w-4 h-4 text-yellow-400" fill="#facc15" />
+                              <span className="text-yellow-400 font-medium">{details.imdb_rating}</span>
+                              <span className="text-xs text-chef-muted/60">IMDb</span>
+                            </div>
+                          )}
                           {data.vote_average && (
                             <div className="flex items-center gap-1">
                               <Star className="w-4 h-4 text-chef-gold" fill="#C0B283" />
                               <span>{data.vote_average.toFixed(1)}</span>
+                              <span className="text-xs text-chef-muted/60">TMDB</span>
+                            </div>
+                          )}
+                          {details?.meta_score && (
+                            <div className="flex items-center gap-1" data-testid="meta-score">
+                              <span className={`px-1.5 py-0.5 text-xs font-bold rounded ${
+                                details.meta_score >= 70 ? "bg-green-600 text-white" :
+                                details.meta_score >= 50 ? "bg-yellow-500 text-black" :
+                                "bg-red-500 text-white"
+                              }`}>{Math.round(details.meta_score)}</span>
+                              <span className="text-xs text-chef-muted/60">Metascore</span>
                             </div>
                           )}
                           {details?.runtime && (
@@ -248,7 +266,40 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry })
                               <span>{data.release_date?.slice(0, 4)}</span>
                             </div>
                           )}
+                          {details?.mpa && (
+                            <span className="px-2 py-0.5 text-xs border border-white/20 rounded">{details.mpa}</span>
+                          )}
                         </div>
+
+                        {/* Box Office & Awards (from IMDB data) */}
+                        {(details?.gross_worldwide || details?.budget || details?.awards) && (
+                          <div className="flex flex-wrap gap-x-6 gap-y-2 mb-6 text-sm" data-testid="imdb-extra">
+                            {details.budget && (
+                              <div>
+                                <span className="text-chef-muted/50 text-xs uppercase tracking-wider">Budget</span>
+                                <p className="text-chef-platinum">${(details.budget / 1e6).toFixed(0)}M</p>
+                              </div>
+                            )}
+                            {details.gross_worldwide && (
+                              <div>
+                                <span className="text-chef-muted/50 text-xs uppercase tracking-wider">Worldwide</span>
+                                <p className="text-chef-platinum">${(details.gross_worldwide / 1e6).toFixed(0)}M</p>
+                              </div>
+                            )}
+                            {details.gross_us_canada && (
+                              <div>
+                                <span className="text-chef-muted/50 text-xs uppercase tracking-wider">US/Canada</span>
+                                <p className="text-chef-platinum">${(details.gross_us_canada / 1e6).toFixed(0)}M</p>
+                              </div>
+                            )}
+                            {details.awards && (
+                              <div className="basis-full">
+                                <span className="text-chef-muted/50 text-xs uppercase tracking-wider">Awards</span>
+                                <p className="text-chef-muted text-xs leading-relaxed mt-0.5">{details.awards}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Genres */}
                         {data.genres && data.genres.length > 0 && (
