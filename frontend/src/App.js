@@ -104,9 +104,17 @@ function AppContent() {
     setSectionLoading(true);
     try {
       let res;
+      const token = localStorage.getItem("chef_token");
+      const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+      
       switch (section) {
         case "curated":
-          res = await axios.post(`${API}/movies/discover`, vibeParams);
+          // Use personalized endpoint if logged in, fallback to discover
+          if (token) {
+            res = await axios.get(`${API}/movies/curated-for-you`, { headers: authHeader });
+          } else {
+            res = await axios.post(`${API}/movies/discover`, vibeParams);
+          }
           break;
         case "chefs-special":
           res = await axios.get(`${API}/movies/sections/chefs-special`);
@@ -169,6 +177,11 @@ function AppContent() {
       localStorage.setItem("chef_token", res.data.token);
       setAuthUser(res.data.user);
       setAuthModalOpen(false);
+      
+      // Refresh curated section with personalized recommendations
+      if (activeSection === "curated") {
+        fetchSectionMovies("curated");
+      }
       
       // Check location permission
       const storedPerm = localStorage.getItem("chef_location_perm");
@@ -326,7 +339,16 @@ function AppContent() {
     if (activeSection === "curated") {
       setSectionLoading(true);
       try {
-        const res = await axios.post(`${API}/movies/discover`, newParams);
+        const token = localStorage.getItem("chef_token");
+        let res;
+        if (token) {
+          // Use personalized recommendations when logged in
+          res = await axios.get(`${API}/movies/curated-for-you`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+        } else {
+          res = await axios.post(`${API}/movies/discover`, newParams);
+        }
         setSectionMovies(res.data.results || []);
       } catch (error) {
         console.error("Failed to update curated:", error);
@@ -642,15 +664,20 @@ function AppContent() {
                         </div>
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                      {movie.match_percentage && (
+                      {(movie.match_percentage || movie.curated_score) && (
                         <div className="absolute top-3 right-3 px-2 py-1 bg-chef-teal/20 border border-chef-teal/30 text-chef-teal text-xs">
-                          {movie.match_percentage}%
+                          {movie.curated_score ? `${Math.min(100, Math.round(movie.curated_score))}%` : `${movie.match_percentage}%`}
+                        </div>
+                      )}
+                      {movie.in_watchlist && (
+                        <div className="absolute top-3 left-3 px-2 py-1 bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs">
+                          Watchlist
                         </div>
                       )}
                     </div>
                     <div className="p-4">
                       <h3 className="font-serif text-lg truncate">{movie.title}</h3>
-                      <p className="text-sm text-chef-teal mt-1">{movie.vibe_tag}</p>
+                      <p className="text-sm text-chef-teal mt-1">{movie.match_reason || movie.vibe_tag}</p>
                     </div>
                   </motion.div>
                 ))}

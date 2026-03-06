@@ -60,13 +60,24 @@ const MovieCard = ({ movie, onClick, index }) => {
 
       {/* Content */}
       <div className="absolute bottom-0 left-0 right-0 p-4">
-        {/* Match Percentage - Always Visible */}
-        {movie.match_percentage && (
+        {/* Match Percentage or Curated Score - Always Visible */}
+        {(movie.match_percentage || movie.curated_score) && (
           <div className="mb-2">
             <span className="inline-block px-2 py-1 rounded-full bg-chef-teal/20 
                            text-chef-teal font-sans text-sm font-medium
                            border border-chef-teal/30">
-              {movie.match_percentage}% Match
+              {movie.curated_score ? `${Math.min(100, Math.round(movie.curated_score))}%` : `${movie.match_percentage}%`} Match
+            </span>
+          </div>
+        )}
+
+        {/* Watchlist Badge */}
+        {movie.in_watchlist && (
+          <div className="absolute top-3 left-3">
+            <span className="inline-block px-2 py-1 rounded-full bg-amber-500/20 
+                           text-amber-400 font-sans text-xs font-medium
+                           border border-amber-500/30">
+              Watchlist
             </span>
           </div>
         )}
@@ -76,9 +87,9 @@ const MovieCard = ({ movie, onClick, index }) => {
           {movie.title}
         </h3>
 
-        {/* Vibe Tag - Always Visible */}
+        {/* Match Reason or Vibe Tag */}
         <p className="text-chef-gold text-sm italic mt-1 line-clamp-1">
-          {movie.vibe_tag || "Worth discovering"}
+          {movie.match_reason || movie.vibe_tag || "Worth discovering"}
         </p>
 
         {/* Genres - Shows on Hover */}

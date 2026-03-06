@@ -104,6 +104,13 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] Location Permission Modal
 - [x] Streaming Availability ("Where to Watch") via MoviesOfTheNight API
 - [x] User Details page (Photo, Gender, Bio, Streaming Services, Letterboxd)
+- [x] **Curated For You - Personalized Recommendation Engine**:
+  - [x] Curated score based on user's watch history (ratings, watch count, recency)
+  - [x] Boosts for favorite genres, directors, and actors
+  - [x] Watchlist movies prioritized (30 point boost)
+  - [x] Similar movies to highly-rated content included
+  - [x] Top 20 movies displayed with match percentage and reason
+  - [x] Match reasons: "On your watchlist", "Your favorite genre", "Director you love", "Similar to movies you rated highly"
 - [x] **My Movies page with 3 tabs:**
   - [x] **Diary** - Watch history with search, add, rate (0-10 w/ 0.1 increments), date tracking, remove
     - [x] **Diary Detail Modal** - Click any diary movie to open detailed watch history
@@ -126,7 +133,6 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] Password reset via Resend email API
 
 ## Future Tasks (P2)
-- [ ] Refine Recommendation Algorithm - Rewatchability Multiplier, Complexity Penalty
 - [ ] JustWatch API Integration - Replace/augment MoviesOfTheNight for streaming availability
 - [ ] Refactor App.js into React Context providers
 - [ ] Split backend/server.py into routers, models, services

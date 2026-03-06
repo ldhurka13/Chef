@@ -2107,6 +2107,259 @@ async def check_watchlist(tmdb_id: int, current_user: dict = Depends(get_current
     )
     return {"in_watchlist": existing is not None}
 
+# ============ CURATED FOR YOU - PERSONALIZED RECOMMENDATIONS ============
+
+@api_router.get("/movies/curated-for-you")
+async def get_curated_for_you(current_user: dict = Depends(get_current_user)):
+    """
+    Generate personalized movie recommendations based on user's:
+    - Watch history (ratings, watch count, recency)
+    - Favorite genres/actors/directors from profile insights
+    - Watchlist (movies user wants to watch)
+    
+    Returns top 20 movies ranked by curated score.
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    # If user not logged in, return trending movies as fallback
+    if not current_user:
+        data = tmdb_request("/trending/movie/week")
+        if not data:
+            raise HTTPException(status_code=500, detail="Failed to fetch movies")
+        return {"results": data.get("results", [])[:20], "personalized": False}
+    
+    user_id = current_user["id"]
+    
+    # 1. Get user's watch history with ratings and watch data
+    watch_history = await db.watch_history.find(
+        {"user_id": user_id},
+        {"_id": 0, "tmdb_id": 1, "user_rating": 1, "watch_count": 1, "watches": 1, "last_watched_date": 1}
+    ).to_list(500)
+    
+    # 2. Get user's watchlist
+    watchlist = await db.watchlist.find(
+        {"user_id": user_id},
+        {"_id": 0, "tmdb_id": 1}
+    ).to_list(200)
+    watchlist_ids = set(w["tmdb_id"] for w in watchlist)
+    watched_ids = set(h["tmdb_id"] for h in watch_history)
+    
+    # 3. Calculate genre/actor/director preferences from watch history
+    genre_scores = {}
+    director_scores = {}
+    actor_scores = {}
+    
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    
+    for h in watch_history:
+        tmdb_id = h["tmdb_id"]
+        rating = h.get("user_rating", 5.0)
+        watch_count = h.get("watch_count", 1) or 1
+        
+        # Calculate recency boost (more recent = higher weight)
+        last_watch = h.get("last_watched_date", "")
+        recency_boost = 1.0
+        if last_watch:
+            try:
+                watch_date = datetime.fromisoformat(last_watch.replace("Z", "+00:00")) if "T" in last_watch else datetime.strptime(last_watch, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                days_ago = (now - watch_date).days
+                # Exponential decay: recent watches get more weight
+                recency_boost = max(0.5, 1.0 - (days_ago / 365) * 0.5)  # 0.5 to 1.0
+            except:
+                recency_boost = 0.75
+        
+        # Combined preference weight: rating * rewatch bonus * recency
+        # Higher ratings (6+) contribute positively, lower ratings contribute less
+        rating_factor = (rating - 5.0) / 5.0  # -1.0 to 1.0
+        rewatch_bonus = 1.0 + 0.2 * (watch_count - 1)  # 1.0, 1.2, 1.4, etc.
+        preference_weight = (1.0 + rating_factor) * rewatch_bonus * recency_boost
+        
+        # Get movie metadata for genre/cast/director info
+        cached = await db.tmdb_cache.find_one({"tmdb_id": tmdb_id}, {"_id": 0})
+        if cached:
+            for genre in cached.get("genres", []):
+                name = genre.get("name") if isinstance(genre, dict) else genre
+                if name:
+                    genre_scores[name] = genre_scores.get(name, 0) + preference_weight
+            
+            for director in cached.get("directors", []):
+                name = director.get("name") if isinstance(director, dict) else director
+                if name:
+                    director_scores[name] = director_scores.get(name, 0) + preference_weight
+            
+            for actor in cached.get("cast", [])[:5]:
+                name = actor.get("name") if isinstance(actor, dict) else actor
+                if name:
+                    actor_scores[name] = actor_scores.get(name, 0) + preference_weight * 0.5  # Actors weighted less
+    
+    # Normalize scores
+    max_genre = max(genre_scores.values()) if genre_scores else 1
+    max_director = max(director_scores.values()) if director_scores else 1
+    max_actor = max(actor_scores.values()) if actor_scores else 1
+    
+    genre_prefs = {k: v / max_genre for k, v in genre_scores.items()}
+    director_prefs = {k: v / max_director for k, v in director_scores.items()}
+    actor_prefs = {k: v / max_actor for k, v in actor_scores.items()}
+    
+    # 4. Get candidate movies from multiple sources
+    candidate_movies = []
+    seen_ids = set()
+    
+    # Source 1: Watchlist movies (highest priority - user explicitly wants these)
+    for w in watchlist[:30]:
+        if w["tmdb_id"] not in seen_ids:
+            movie_data = tmdb_request(f"/movie/{w['tmdb_id']}", {"append_to_response": "credits"})
+            if movie_data:
+                candidate_movies.append({"source": "watchlist", "data": movie_data})
+                seen_ids.add(w["tmdb_id"])
+    
+    # Source 2: Similar to highly-rated movies in history
+    top_rated = sorted(watch_history, key=lambda x: x.get("user_rating", 0), reverse=True)[:5]
+    for h in top_rated:
+        similar = tmdb_request(f"/movie/{h['tmdb_id']}/similar")
+        if similar:
+            for m in similar.get("results", [])[:5]:
+                if m["id"] not in seen_ids and m["id"] not in watched_ids:
+                    candidate_movies.append({"source": "similar", "data": m})
+                    seen_ids.add(m["id"])
+    
+    # Source 3: Discover movies in favorite genres
+    top_genres = sorted(genre_scores.items(), key=lambda x: x[1], reverse=True)[:3]
+    genre_ids = [str(gid) for gname, _ in top_genres for gid, name in GENRE_MAP.items() if name == gname]
+    if genre_ids:
+        discover_data = tmdb_request("/discover/movie", {
+            "sort_by": "vote_average.desc",
+            "vote_count.gte": 200,
+            "vote_average.gte": 7.0,
+            "with_genres": ",".join(genre_ids[:2])
+        })
+        if discover_data:
+            for m in discover_data.get("results", [])[:15]:
+                if m["id"] not in seen_ids and m["id"] not in watched_ids:
+                    candidate_movies.append({"source": "genre_match", "data": m})
+                    seen_ids.add(m["id"])
+    
+    # Source 4: Trending (for diversity)
+    trending = tmdb_request("/trending/movie/week")
+    if trending:
+        for m in trending.get("results", [])[:10]:
+            if m["id"] not in seen_ids and m["id"] not in watched_ids:
+                candidate_movies.append({"source": "trending", "data": m})
+                seen_ids.add(m["id"])
+    
+    # 5. Calculate curated score for each candidate
+    scored_movies = []
+    
+    for candidate in candidate_movies:
+        movie = candidate["data"]
+        source = candidate["source"]
+        tmdb_id = movie.get("id")
+        
+        # Base score
+        curated_score = 0.0
+        
+        # Watchlist boost (major boost - user explicitly wants this)
+        if source == "watchlist" or tmdb_id in watchlist_ids:
+            curated_score += 30.0
+        
+        # Genre match scoring
+        movie_genres = movie.get("genres", []) or []
+        if not movie_genres and movie.get("genre_ids"):
+            movie_genres = [{"name": GENRE_MAP.get(gid, "")} for gid in movie.get("genre_ids", [])]
+        
+        genre_match = 0.0
+        for g in movie_genres:
+            gname = g.get("name") if isinstance(g, dict) else GENRE_MAP.get(g, "")
+            if gname in genre_prefs:
+                genre_match += genre_prefs[gname]
+        if movie_genres:
+            genre_match /= len(movie_genres)
+        curated_score += genre_match * 25.0  # Max 25 points for genre match
+        
+        # Director match scoring
+        credits = movie.get("credits", {})
+        directors = [c["name"] for c in credits.get("crew", []) if c.get("job") == "Director"]
+        director_match = 0.0
+        for d in directors:
+            if d in director_prefs:
+                director_match = max(director_match, director_prefs[d])
+        curated_score += director_match * 20.0  # Max 20 points for director match
+        
+        # Actor match scoring
+        cast = credits.get("cast", [])[:5]
+        actor_match = 0.0
+        for a in cast:
+            aname = a.get("name", "")
+            if aname in actor_prefs:
+                actor_match += actor_prefs[aname]
+        if cast:
+            actor_match /= len(cast)
+        curated_score += actor_match * 15.0  # Max 15 points for actor match
+        
+        # Quality bonus (TMDB rating)
+        vote_avg = movie.get("vote_average", 0)
+        vote_count = movie.get("vote_count", 0)
+        if vote_count > 100 and vote_avg >= 6.0:
+            quality_bonus = (vote_avg - 6.0) / 4.0 * 10.0  # Max 10 points for 10-rated movies
+            curated_score += quality_bonus
+        
+        # Source bonus
+        if source == "similar":
+            curated_score += 5.0  # Bonus for being similar to liked movies
+        
+        scored_movies.append({
+            "id": tmdb_id,
+            "title": movie.get("title", ""),
+            "poster_path": movie.get("poster_path"),
+            "backdrop_path": movie.get("backdrop_path"),
+            "overview": movie.get("overview", ""),
+            "release_date": movie.get("release_date", ""),
+            "vote_average": vote_avg,
+            "vote_count": vote_count,
+            "genre_ids": movie.get("genre_ids", []),
+            "genres": [g.get("name") if isinstance(g, dict) else GENRE_MAP.get(g, str(g)) for g in movie_genres],
+            "curated_score": round(curated_score, 1),
+            "in_watchlist": tmdb_id in watchlist_ids,
+            "match_reason": _get_match_reason(source, genre_match, director_match, actor_match, tmdb_id in watchlist_ids)
+        })
+    
+    # Sort by curated score (highest first)
+    scored_movies.sort(key=lambda x: x["curated_score"], reverse=True)
+    
+    # Return top 20
+    return {
+        "results": scored_movies[:20],
+        "personalized": True,
+        "total_candidates": len(candidate_movies)
+    }
+
+
+def _get_match_reason(source: str, genre_match: float, director_match: float, actor_match: float, in_watchlist: bool) -> str:
+    """Generate a human-readable reason for why this movie was recommended"""
+    reasons = []
+    
+    if in_watchlist:
+        reasons.append("On your watchlist")
+    if director_match > 0.5:
+        reasons.append("Director you love")
+    if genre_match > 0.5:
+        reasons.append("Your favorite genre")
+    if actor_match > 0.3:
+        reasons.append("Cast you enjoy")
+    if source == "similar":
+        reasons.append("Similar to movies you rated highly")
+    if source == "trending" and not reasons:
+        reasons.append("Trending now")
+    
+    if not reasons:
+        reasons.append("Recommended for you")
+    
+    return reasons[0]  # Return primary reason
+
+
 # Movie endpoints
 @api_router.post("/movies/discover")
 async def discover_movies(vibe_params: VibeParams):
