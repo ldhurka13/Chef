@@ -918,7 +918,12 @@ const ProfileTab = ({ user, onUserUpdate }) => {
             <div className="flex-1 min-w-0">
               <p className="text-sm text-chef-platinum font-medium truncate">{item.name}</p>
               <p className="text-xs text-chef-muted">
-                {item.count} movie{item.count !== 1 ? "s" : ""} &middot; avg {item.avg_rating}/10
+                {item.count} movie{item.count !== 1 ? "s" : ""}
+                {item.avg_preference !== undefined && (
+                  <span className={item.avg_preference >= 0 ? "text-chef-teal" : "text-red-400"}>
+                    {" "}&middot; {item.avg_preference >= 0 ? "+" : ""}{item.avg_preference} vs avg
+                  </span>
+                )}
               </p>
             </div>
           </div>

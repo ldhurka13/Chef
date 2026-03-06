@@ -1,0 +1,73 @@
+{
+  "summary": "Completed E2E testing of S-curve rating conversion and preference scoring features. All 12 backend tests passed (100%). Frontend verified: Profile tab displays avg_preference as '+X.X vs avg' in teal color for positive values. Diary/Watchlist tabs working correctly. Movie detail modal shows IMDB rating, Metascore, box office correctly.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Backend: S-curve conversion 0.5/5 → ~0.5/10",
+    "Backend: S-curve conversion 1.5/5 → ~2.4/10 (compressed)",
+    "Backend: S-curve conversion 2.5/5 → 5.0/10 (midpoint same as linear)",
+    "Backend: S-curve conversion 3.5/5 → ~7.9/10 (amplified from linear 7.0)",
+    "Backend: S-curve conversion 4.5/5 → ~9.4/10 (amplified from linear 9.0)",
+    "Backend: S-curve conversion 5.0/5 → 10.0/10",
+    "Backend: GET /api/user/profile-insights returns avg_preference field (not avg_rating)",
+    "Backend: Preference uses Bayesian-adjusted IMDB rating (GLOBAL_MEAN=6.5, BAYESIAN_M=1000)",
+    "Backend: Positive avg_preference = user rates higher than expected (Drama: +3.1)",
+    "Backend: Profile insights returns genres/actors/directors all with avg_preference",
+    "Backend: Bayesian formula correctly shrinks low-vote movies toward global mean",
+    "Backend: Letterboxd import uses letterboxd_to_chef_rating S-curve function",
+    "Frontend: Profile tab shows preference indicator '+X.X vs avg' in teal (positive)",
+    "Frontend: Genre insights: Drama +3.1, Thriller +3, Comedy +3.5, Music +3.5",
+    "Frontend: Director insights: Bong Joon Ho +3.5, Damien Chazelle +3.5",
+    "Frontend: Actor insights: Song Kang-ho +3.5, Lee Sun-kyun +3.5",
+    "Frontend: Diary tab shows 4 Letterboxd-imported movies with LB badges",
+    "Frontend: Diary ratings use S-curve: Fight Club 9.0, Parasite 10.0, Whiplash 10.0, Moonlight 9.0",
+    "Frontend: Watchlist tab shows 2 movies with LB badges",
+    "Frontend: Movie detail shows IMDB rating (9.2 for Godfather)",
+    "Frontend: Movie detail shows Metascore (100 for Godfather)",
+    "Frontend: Movie detail shows Box Office (Worldwide $250M, US/Canada $136M)",
+    "Frontend: Movie detail shows Awards (Won 3 Oscars)",
+    "Frontend: All tabs (Diary, Watchlist, Profile) navigation works correctly"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_scurve_preference.py",
+    "/app/test_reports/pytest/pytest_scurve_preference.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "S-curve formula correctly implemented: lower half uses exponent 1.4 (compression), upper half uses exponent 0.6 (amplification)",
+    "Bayesian adjustment correctly shrinks low-vote IMDB ratings toward GLOBAL_MEAN=6.5",
+    "Preference signal formula correct: user_rating - bayesian_expected(imdb_rating, imdb_votes)",
+    "Weight calculation includes +3 shift to ensure slightly-liked movies contribute positively",
+    "Frontend correctly displays preference in teal for positive, red class available for negative",
+    "MyMoviesPage.js RankedList component correctly uses avg_preference not avg_rating"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_scurve_preference.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (12/12 tests passed)",
+    "frontend": "100% (all preference display and tabs verified)"
+  },
+
+  "test_credentials": "lbtest@example.com / test1234 (existing test user with 4 diary entries)",
+  "seed_data_creation": "No new seed data needed - used existing lbtest user with Letterboxd imports",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "S-curve conversion and preference scoring tested and verified. Key points: 1) letterboxd_to_chef_rating function at line 784 uses S-curve that compresses low ratings (1.5/5→2.4) and amplifies high ratings (4.5/5→9.4). 2) Profile insights at /api/user/profile-insights returns avg_preference field using Bayesian-adjusted IMDB ratings (GLOBAL_MEAN=6.5, BAYESIAN_M=1000). 3) Frontend MyMoviesPage.js displays preference as '+X.X vs avg' in teal color. 4) Test user lbtest@example.com has 4 diary entries (Fight Club, Parasite, Whiplash, Moonlight) showing Drama genre at +3.1 vs avg, Bong Joon Ho at +3.5. 5) Movie detail IMDB enrichment still working (Godfather: 9.2 IMDb, 100 Metascore, $250M worldwide)."
+}

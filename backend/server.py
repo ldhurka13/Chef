@@ -781,6 +781,26 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     
     return {"avatar_url": avatar_url}
 
+def letterboxd_to_chef_rating(lb_rating: float) -> float:
+    """Non-linear Letterboxd (0-5) to Chef (0-10) conversion.
+    S-curve: compresses low ratings (1.5 and below), amplifies high ratings (3.5+).
+    Midpoint (2.5/5) maps to 5.0/10 (same as linear).
+    """
+    if lb_rating is None or lb_rating <= 0:
+        return 0.0
+    lb_rating = min(lb_rating, 5.0)
+    mid = 2.5
+    if lb_rating <= mid:
+        # Lower half: compress with exponent > 1
+        normalized = lb_rating / mid  # 0.0 - 1.0
+        chef = 5.0 * (normalized ** 1.4)
+    else:
+        # Upper half: stretch with exponent < 1
+        normalized = (lb_rating - mid) / (5.0 - mid)  # 0.0 - 1.0
+        chef = 5.0 + 5.0 * (normalized ** 0.6)
+    return round(max(0.0, min(10.0, chef)), 1)
+
+
 @api_router.post("/auth/import-letterboxd")
 async def import_letterboxd(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Import Letterboxd data from CSV or ZIP file, populating diary and watchlist"""
@@ -851,7 +871,7 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
                 try:
                     r5 = float(row["Rating"])
                     entry["rating_5"] = r5
-                    entry["rating_10"] = round(r5 * 2, 1)
+                    entry["rating_10"] = letterboxd_to_chef_rating(r5)
                 except (ValueError, TypeError):
                     pass
             if row.get("WatchedDate"):
@@ -960,7 +980,7 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
             
             # Convert 0-5 rating to 0-10
             try:
-                rating_10 = round(float(rating_str) * 2, 1) if rating_str else 7.0
+                rating_10 = letterboxd_to_chef_rating(float(rating_str)) if rating_str else 7.0
             except ValueError:
                 rating_10 = 7.0
             
@@ -1041,7 +1061,7 @@ async def import_letterboxd(file: UploadFile = File(...), current_user: dict = D
             
             stats["total_processed"] += 1
             try:
-                rating_10 = round(float(rating_str) * 2, 1) if rating_str else 7.0
+                rating_10 = letterboxd_to_chef_rating(float(rating_str)) if rating_str else 7.0
             except ValueError:
                 rating_10 = 7.0
             
@@ -1674,47 +1694,107 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     if not history:
         return {"genres": [], "actors": [], "directors": []}
     
-    # Get movie metadata (cached in MongoDB)
+    # Also get local IMDB data for these movies (for preference computation)
     tmdb_ids = [h["tmdb_id"] for h in history]
     metadata = await _get_movie_metadata(tmdb_ids)
     
-    # Score computation
+    # Build title→local_movie lookup for IMDB ratings
+    # We need to match diary movies to local IMDB data by title+year
+    titles_years = set()
+    for h in history:
+        meta = metadata.get(h["tmdb_id"], {})
+        # Try to get title from metadata or from history doc
+        title = None
+        for g in meta.get("genres", []):
+            pass  # just checking metadata exists
+        titles_years.add(h["tmdb_id"])
+    
+    # Batch lookup local IMDB data by title for all diary movies
+    # First get titles from watch_history
+    history_full = await db.watch_history.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0, "tmdb_id": 1, "title": 1}
+    ).to_list(500)
+    title_map = {h["tmdb_id"]: h.get("title", "") for h in history_full}
+    
+    # Fetch IMDB data for all movies at once
+    local_movies = {}
+    for tmdb_id, title in title_map.items():
+        if title:
+            local = await db.movies.find_one(
+                {"title_lower": title.lower()},
+                {"_id": 0, "imdb_rating": 1, "imdb_votes": 1}
+            )
+            if local:
+                local_movies[tmdb_id] = local
+    
+    # Compute global mean IMDB rating and Bayesian prior
+    # Using m=1000 as minimum votes for full weight (Bayesian shrinkage)
+    GLOBAL_MEAN = 6.5  # Approximate IMDB global mean
+    BAYESIAN_M = 1000  # Minimum votes for full confidence
+    
+    def bayesian_expected(imdb_rating, imdb_votes):
+        """Shrink IMDB rating toward global mean for movies with few votes."""
+        if not imdb_rating or not imdb_votes:
+            return GLOBAL_MEAN
+        v = max(imdb_votes, 1)
+        return (v * imdb_rating + BAYESIAN_M * GLOBAL_MEAN) / (v + BAYESIAN_M)
+    
+    # Score computation — preference signal: user_rating - bayesian_expected
     genre_scores = {}
     actor_scores = {}
     director_scores = {}
     
     for h in history:
         watches = h.get("watches", [])
-        avg_rating = (sum(w.get("rating", 0) for w in watches) / len(watches)) if watches else h.get("user_rating", 5.0)
+        user_avg = (sum(w.get("rating", 0) for w in watches) / len(watches)) if watches else h.get("user_rating", 5.0)
         watch_count = h.get("watch_count", 1) or 1
-        weight = avg_rating * (1 + 0.1 * (watch_count - 1))
+        
+        # Get expected rating (Bayesian-adjusted IMDB rating)
+        local = local_movies.get(h["tmdb_id"])
+        expected = bayesian_expected(
+            local.get("imdb_rating") if local else None,
+            local.get("imdb_votes") if local else None
+        )
+        
+        # Preference signal: how much the user liked it vs expected
+        preference = user_avg - expected
+        
+        # Weight: preference signal boosted by rewatch frequency
+        # A positive preference means the user liked it more than average
+        # Multiply by a base factor to keep scores meaningful even for neutral preferences
+        rewatch_boost = 1 + 0.15 * (watch_count - 1)
+        weight = (preference + 3.0) * rewatch_boost  # +3 shift so slightly-liked movies still contribute positively
         
         meta = metadata.get(h["tmdb_id"], {})
         
         for genre in meta.get("genres", []):
             name = genre["name"]
             if name not in genre_scores:
-                genre_scores[name] = {"total_weight": 0, "count": 0}
+                genre_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0}
             genre_scores[name]["total_weight"] += weight
             genre_scores[name]["count"] += 1
+            genre_scores[name]["total_pref"] += preference
         
         for actor in meta.get("cast", []):
             name = actor.get("name", "")
             if not name:
                 continue
             if name not in actor_scores:
-                actor_scores[name] = {"total_weight": 0, "count": 0, "profile_path": actor.get("profile_path")}
+                actor_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "profile_path": actor.get("profile_path")}
             actor_scores[name]["total_weight"] += weight
             actor_scores[name]["count"] += 1
+            actor_scores[name]["total_pref"] += preference
         
         for director in meta.get("directors", []):
             name = director.get("name", "")
             if not name:
                 continue
             if name not in director_scores:
-                director_scores[name] = {"total_weight": 0, "count": 0, "profile_path": director.get("profile_path")}
+                director_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "profile_path": director.get("profile_path")}
             director_scores[name]["total_weight"] += weight
             director_scores[name]["count"] += 1
+            director_scores[name]["total_pref"] += preference
     
     def rank(scores_dict, limit=5):
         ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
@@ -1723,7 +1803,7 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
                 "name": name,
                 "score": round(data["total_weight"], 1),
                 "count": data["count"],
-                "avg_rating": round(data["total_weight"] / data["count"], 1) if data["count"] else 0,
+                "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
                 "profile_path": data.get("profile_path"),
             }
             for name, data in ranked[:limit]
