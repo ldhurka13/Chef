@@ -1543,6 +1543,111 @@ async def delete_watch_entry(tmdb_id: int, watch_id: str, current_user: dict = D
     )
     return updated
 
+# ============ PROFILE INSIGHTS ENDPOINT ============
+
+@api_router.get("/user/profile-insights")
+async def get_profile_insights(current_user: dict = Depends(get_current_user)):
+    """Compute top 5 genres, actors, directors from user's watch history + favorites"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get diary entries
+    history = await db.watch_history.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0, "tmdb_id": 1, "user_rating": 1, "watch_count": 1, "watches": 1}
+    ).to_list(500)
+    
+    if not history:
+        return {"genres": [], "actors": [], "directors": []}
+    
+    # Fetch TMDB details + credits concurrently for all diary movies
+    tmdb_api_key = os.environ.get("TMDB_API_KEY", "")
+    sem = asyncio.Semaphore(15)
+    
+    async def fetch_movie_data(tmdb_id: int):
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    details_resp, credits_resp = await asyncio.gather(
+                        client.get(f"https://api.themoviedb.org/3/movie/{tmdb_id}", params={"api_key": tmdb_api_key}),
+                        client.get(f"https://api.themoviedb.org/3/movie/{tmdb_id}/credits", params={"api_key": tmdb_api_key}),
+                    )
+                    details = details_resp.json() if details_resp.status_code == 200 else {}
+                    credits = credits_resp.json() if credits_resp.status_code == 200 else {}
+                    return {"details": details, "credits": credits}
+            except Exception:
+                return {"details": {}, "credits": {}}
+    
+    results = await asyncio.gather(*[fetch_movie_data(h["tmdb_id"]) for h in history])
+    
+    # Score computation
+    genre_scores = {}   # genre_name -> {"total_rating": float, "count": int}
+    actor_scores = {}   # actor_name -> {"total_rating": float, "count": int, "profile_path": str}
+    director_scores = {}  # director_name -> {"total_rating": float, "count": int, "profile_path": str}
+    
+    for h, tmdb_data in zip(history, results):
+        # Use average rating from watches, fallback to user_rating
+        watches = h.get("watches", [])
+        if watches:
+            avg_rating = sum(w.get("rating", 0) for w in watches) / len(watches)
+        else:
+            avg_rating = h.get("user_rating", 5.0)
+        
+        watch_count = h.get("watch_count", 1) or 1
+        weight = avg_rating * (1 + 0.1 * (watch_count - 1))  # Slight boost for rewatches
+        
+        details = tmdb_data["details"]
+        credits = tmdb_data["credits"]
+        
+        # Genres
+        for genre in details.get("genres", []):
+            name = genre["name"]
+            if name not in genre_scores:
+                genre_scores[name] = {"total_weight": 0, "count": 0}
+            genre_scores[name]["total_weight"] += weight
+            genre_scores[name]["count"] += 1
+        
+        # Top-billed actors (first 5)
+        for actor in (credits.get("cast") or [])[:5]:
+            name = actor.get("name", "")
+            if not name:
+                continue
+            if name not in actor_scores:
+                actor_scores[name] = {"total_weight": 0, "count": 0, "profile_path": actor.get("profile_path")}
+            actor_scores[name]["total_weight"] += weight
+            actor_scores[name]["count"] += 1
+        
+        # Directors
+        for crew in (credits.get("crew") or []):
+            if crew.get("job") == "Director":
+                name = crew.get("name", "")
+                if not name:
+                    continue
+                if name not in director_scores:
+                    director_scores[name] = {"total_weight": 0, "count": 0, "profile_path": crew.get("profile_path")}
+                director_scores[name]["total_weight"] += weight
+                director_scores[name]["count"] += 1
+    
+    # Rank and return top 5
+    def rank(scores_dict, limit=5):
+        ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
+        return [
+            {
+                "name": name,
+                "score": round(data["total_weight"], 1),
+                "count": data["count"],
+                "avg_rating": round(data["total_weight"] / data["count"], 1) if data["count"] else 0,
+                "profile_path": data.get("profile_path"),
+            }
+            for name, data in ranked[:limit]
+        ]
+    
+    return {
+        "genres": rank(genre_scores),
+        "actors": rank(actor_scores),
+        "directors": rank(director_scores),
+    }
+
 # ============ WATCHLIST ENDPOINTS ============
 
 @api_router.get("/user/watchlist")

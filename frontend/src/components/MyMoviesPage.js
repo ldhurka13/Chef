@@ -820,54 +820,26 @@ const WatchlistTab = () => {
 // ========== PROFILE TAB ==========
 const ProfileTab = ({ user, onUserUpdate }) => {
   const debounceRef = useRef(null);
-  const [favoriteActors, setFavoriteActors] = useState(user?.favorite_actors || []);
-  const [actorInput, setActorInput] = useState("");
-  const [favoriteDirectors, setFavoriteDirectors] = useState(user?.favorite_directors || []);
-  const [directorInput, setDirectorInput] = useState("");
   const [favoriteMovies, setFavoriteMovies] = useState(user?.favorite_movies || []);
-  const [favoriteGenres, setFavoriteGenres] = useState(user?.favorite_genres || []);
   const [movieQuery, setMovieQuery] = useState("");
   const [movieResults, setMovieResults] = useState([]);
   const [movieSearching, setMovieSearching] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [genresLoading, setGenresLoading] = useState(false);
-  const [allGenres, setAllGenres] = useState([]);
+  const [insights, setInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
 
   useEffect(() => {
-    setFavoriteActors(user?.favorite_actors || []);
-    setFavoriteDirectors(user?.favorite_directors || []);
     setFavoriteMovies(user?.favorite_movies || []);
-    setFavoriteGenres(user?.favorite_genres || []);
   }, [user]);
 
-  useEffect(() => { fetchGenres(); }, []);
+  useEffect(() => { fetchInsights(); }, []);
 
-  const fetchGenres = async () => {
-    setGenresLoading(true);
+  const fetchInsights = async () => {
+    setInsightsLoading(true);
     try {
-      const res = await axios.get(`${API}/genres`);
-      setAllGenres(res.data.genres || []);
-    } catch {} finally { setGenresLoading(false); }
-  };
-
-  const handleAddActor = () => {
-    const name = actorInput.trim();
-    if (!name || favoriteActors.includes(name) || favoriteActors.length >= 20) return;
-    setFavoriteActors((prev) => [...prev, name]);
-    setActorInput("");
-  };
-
-  const handleAddDirector = () => {
-    const name = directorInput.trim();
-    if (!name || favoriteDirectors.includes(name) || favoriteDirectors.length >= 20) return;
-    setFavoriteDirectors((prev) => [...prev, name]);
-    setDirectorInput("");
-  };
-
-  const toggleGenre = (genreName) => {
-    setFavoriteGenres((prev) =>
-      prev.includes(genreName) ? prev.filter((g) => g !== genreName) : [...prev, genreName]
-    );
+      const res = await axios.get(`${API}/user/profile-insights`, { headers: authHeaders() });
+      setInsights(res.data);
+    } catch {} finally { setInsightsLoading(false); }
   };
 
   const handleMovieSearch = useCallback((q) => {
@@ -886,157 +858,78 @@ const ProfileTab = ({ user, onUserUpdate }) => {
 
   const handleAddMovie = (movie) => {
     if (favoriteMovies.length >= 5 || favoriteMovies.some((m) => m.id === movie.id)) return;
-    setFavoriteMovies((prev) => [...prev, movie]);
+    const updated = [...favoriteMovies, movie];
+    setFavoriteMovies(updated);
     setMovieQuery("");
     setMovieResults([]);
+    saveMovies(updated);
   };
 
-  const handleSave = async () => {
+  const handleRemoveMovie = (movieId) => {
+    const updated = favoriteMovies.filter((m) => m.id !== movieId);
+    setFavoriteMovies(updated);
+    saveMovies(updated);
+  };
+
+  const saveMovies = async (movies) => {
     setSaving(true);
     try {
-      const res = await axios.put(
-        `${API}/auth/profile`,
-        {
-          favorite_actors: favoriteActors,
-          favorite_movies: favoriteMovies,
-          favorite_directors: favoriteDirectors,
-          favorite_genres: favoriteGenres,
-        },
-        { headers: authHeaders() }
-      );
+      const res = await axios.put(`${API}/auth/profile`, { favorite_movies: movies }, { headers: authHeaders() });
       if (onUserUpdate) onUserUpdate(res.data);
-      toast.success("Profile saved");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Save failed");
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
-  const Section = ({ title, icon: Icon, children }) => (
+  const Section = ({ title, icon: Icon, children, subtitle }) => (
     <div className="mb-8">
-      <div className="flex items-center gap-2.5 mb-4">
+      <div className="flex items-center gap-2.5 mb-1">
         <Icon className="w-4 h-4 text-chef-teal" strokeWidth={1.5} />
         <h3 className="font-serif text-lg text-chef-platinum tracking-wide">{title}</h3>
       </div>
+      {subtitle && <p className="text-xs text-chef-muted/50 mb-4 ml-6.5">{subtitle}</p>}
+      {!subtitle && <div className="mb-4" />}
       {children}
     </div>
   );
 
+  const TMDB_IMG = "https://image.tmdb.org/t/p/";
+
+  const RankedList = ({ items, showImage }) => {
+    if (!items || items.length === 0) {
+      return <p className="text-sm text-chef-muted/40 ml-1">Not enough watch data yet</p>;
+    }
+    return (
+      <div className="space-y-2">
+        {items.map((item, idx) => (
+          <div
+            key={item.name}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5"
+            data-testid={`ranked-item-${idx}`}
+          >
+            <span className="text-lg font-serif text-chef-muted/30 w-6 text-center flex-shrink-0">{idx + 1}</span>
+            {showImage && item.profile_path ? (
+              <img src={`${TMDB_IMG}w45${item.profile_path}`} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+            ) : showImage ? (
+              <div className="w-8 h-8 rounded-full bg-chef-bg flex-shrink-0 flex items-center justify-center">
+                <User className="w-3.5 h-3.5 text-chef-muted/30" />
+              </div>
+            ) : null}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-chef-platinum font-medium truncate">{item.name}</p>
+              <p className="text-xs text-chef-muted">
+                {item.count} movie{item.count !== 1 ? "s" : ""} &middot; avg {item.avg_rating}/10
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div>
-      {/* Favorite Genres */}
-      <Section title="Favorite Genres" icon={Heart}>
-        {genresLoading ? (
-          <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-chef-teal animate-spin" /></div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {allGenres.map((genre) => {
-              const isActive = favoriteGenres.includes(genre.name);
-              return (
-                <button
-                  key={genre.id}
-                  onClick={() => toggleGenre(genre.name)}
-                  className={`px-3 py-1.5 rounded-full text-sm border transition-all duration-200
-                    ${isActive
-                      ? "bg-chef-teal/15 border-chef-teal/40 text-chef-teal"
-                      : "bg-chef-surface/40 border-white/10 text-chef-muted hover:border-white/20 hover:text-chef-platinum"
-                    }`}
-                  data-testid={`genre-toggle-${genre.id}`}
-                >
-                  {genre.name}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </Section>
-
-      {/* Favorite Actors */}
-      <Section title="Favorite Actors" icon={Users}>
-        <div className="flex gap-2 mb-3">
-          <input
-            type="text"
-            value={actorInput}
-            onChange={(e) => setActorInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddActor()}
-            placeholder="Type actor name and press Enter"
-            className="flex-1 bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-chef-platinum placeholder:text-chef-muted/30 focus:outline-none focus:border-chef-teal/40 transition-colors"
-            data-testid="profile-actor-input"
-          />
-          <button
-            onClick={handleAddActor}
-            disabled={!actorInput.trim()}
-            className="px-4 py-2.5 rounded-lg bg-chef-teal/10 border border-chef-teal/20 text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            data-testid="profile-add-actor-btn"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <AnimatePresence>
-            {favoriteActors.map((actor) => (
-              <motion.span
-                key={actor}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-chef-surface border border-white/10 text-chef-platinum"
-              >
-                {actor}
-                <button onClick={() => setFavoriteActors((prev) => prev.filter((a) => a !== actor))} className="text-chef-muted hover:text-red-400 transition-colors">
-                  <X className="w-3 h-3" />
-                </button>
-              </motion.span>
-            ))}
-          </AnimatePresence>
-          {favoriteActors.length === 0 && <p className="text-sm text-chef-muted/40">No favorite actors added yet</p>}
-        </div>
-      </Section>
-
-      {/* Favorite Directors */}
-      <Section title="Favorite Directors" icon={Clapperboard}>
-        <div className="flex gap-2 mb-3">
-          <input
-            type="text"
-            value={directorInput}
-            onChange={(e) => setDirectorInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddDirector()}
-            placeholder="Type director name and press Enter"
-            className="flex-1 bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-chef-platinum placeholder:text-chef-muted/30 focus:outline-none focus:border-chef-teal/40 transition-colors"
-            data-testid="profile-director-input"
-          />
-          <button
-            onClick={handleAddDirector}
-            disabled={!directorInput.trim()}
-            className="px-4 py-2.5 rounded-lg bg-chef-teal/10 border border-chef-teal/20 text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            data-testid="profile-add-director-btn"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <AnimatePresence>
-            {favoriteDirectors.map((director) => (
-              <motion.span
-                key={director}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-chef-surface border border-white/10 text-chef-platinum"
-              >
-                {director}
-                <button onClick={() => setFavoriteDirectors((prev) => prev.filter((d) => d !== director))} className="text-chef-muted hover:text-red-400 transition-colors">
-                  <X className="w-3 h-3" />
-                </button>
-              </motion.span>
-            ))}
-          </AnimatePresence>
-          {favoriteDirectors.length === 0 && <p className="text-sm text-chef-muted/40">No favorite directors added yet</p>}
-        </div>
-      </Section>
-
-      {/* Top 5 Favorite Movies */}
+      {/* Top 5 Favorite Movies (user-chosen) */}
       <Section title="Top 5 Favorite Movies" icon={Film}>
         {favoriteMovies.length < 5 && (
           <div className="relative mb-4">
@@ -1096,7 +989,7 @@ const ProfileTab = ({ user, onUserUpdate }) => {
                       </div>
                     )}
                     <button
-                      onClick={() => setFavoriteMovies((prev) => prev.filter((m) => m.id !== movie.id))}
+                      onClick={() => handleRemoveMovie(movie.id)}
                       className="absolute top-1 right-1 p-1 rounded-full bg-black/70 text-white hover:bg-red-500/80 transition-colors"
                       data-testid={`profile-remove-movie-${i}`}
                     >
@@ -1115,22 +1008,33 @@ const ProfileTab = ({ user, onUserUpdate }) => {
             );
           })}
         </div>
+        {saving && (
+          <div className="flex items-center gap-2 mt-2 text-xs text-chef-muted">
+            <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+          </div>
+        )}
       </Section>
 
-      {/* Save Button */}
-      <div className="sticky bottom-24 z-10 flex justify-end">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-8 py-3 rounded-full bg-chef-teal/20 border border-chef-teal/30 text-chef-teal font-medium text-sm hover:bg-chef-teal/30 transition-colors disabled:opacity-50 shadow-lg shadow-black/30"
-          data-testid="save-profile-btn"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          Save Profile
-        </motion.button>
-      </div>
+      {/* Auto-ranked Insights */}
+      {insightsLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-6 h-6 text-chef-teal animate-spin" />
+        </div>
+      ) : (
+        <>
+          <Section title="Top Genres" icon={Heart} subtitle="Ranked by your watch history and ratings">
+            <RankedList items={insights?.genres} />
+          </Section>
+
+          <Section title="Top Actors" icon={Users} subtitle="Based on movies you've watched and rated">
+            <RankedList items={insights?.actors} showImage />
+          </Section>
+
+          <Section title="Top Directors" icon={Clapperboard} subtitle="Based on movies you've watched and rated">
+            <RankedList items={insights?.directors} showImage />
+          </Section>
+        </>
+      )}
     </div>
   );
 };
