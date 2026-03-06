@@ -67,6 +67,7 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - `POST /api/user/watch-history/{tmdb_id}/watches` - Add a watch entry
 - `PUT /api/user/watch-history/{tmdb_id}/watches/{watch_id}` - Edit a watch
 - `DELETE /api/user/watch-history/{tmdb_id}/watches/{watch_id}` - Delete a watch
+- `GET /api/user/profile-insights` - Auto-ranked top 5 genres, actors, directors from watch history
 - `GET /api/user/watchlist` - Get user's watchlist
 - `POST /api/user/watchlist` - Add to watchlist
 - `DELETE /api/user/watchlist/{tmdb_id}` - Remove from watchlist
@@ -110,7 +111,7 @@ Build a context-aware movie recommendation engine called "Chef" with:
     - [x] "First Watch" / "Re-watch #N" labels, descending order (latest first)
     - [x] Inline edit & delete per watch; deleting last watch removes movie from diary
   - [x] **Watchlist** - Search & add movies to watch later, remove from watchlist
-  - [x] **Profile** - Favorite Genres, Favorite Actors, Favorite Directors, Top 5 Favorite Movies
+  - [x] **Profile** - Top 5 Favorite Movies (user-chosen, auto-saves), auto-ranked Top Genres/Actors/Directors (read-only, computed from diary via TMDB)
 - [x] **Letterboxd Import**: ZIP + CSV support; ratings.csv → Diary (5→10 scale), reviews.csv → comments, watchlist.csv → Watchlist. Orange "LB" badge on imported items
 - [x] Password reset via Resend email API
 
