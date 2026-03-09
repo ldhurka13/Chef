@@ -2018,6 +2018,15 @@ async def _get_movie_metadata(tmdb_ids: list) -> dict:
                 
                 genres = [{"id": g["id"], "name": g["name"]} for g in details.get("genres", [])]
                 
+                # Extract franchise/collection info
+                collection = details.get("belongs_to_collection")
+                franchise_info = None
+                if collection:
+                    franchise_info = {
+                        "id": collection.get("id"),
+                        "name": collection.get("name")
+                    }
+                
                 # Enhanced cast data with order and popularity for actor impact
                 raw_cast = credits.get("cast") or []
                 cast = [
@@ -2049,14 +2058,15 @@ async def _get_movie_metadata(tmdb_ids: list) -> dict:
                     "cast": cast, 
                     "directors": directors,
                     "cast_counts": cast_role_counts,
-                    "total_cast": len(raw_cast)
+                    "total_cast": len(raw_cast),
+                    "franchise": franchise_info  # Add franchise data
                 }
                 await db.movie_metadata.update_one(
                     {"tmdb_id": tmdb_id}, {"$set": doc}, upsert=True
                 )
                 return doc
             except Exception:
-                return {"tmdb_id": tmdb_id, "genres": [], "cast": [], "directors": [], "cast_counts": {}, "total_cast": 0}
+                return {"tmdb_id": tmdb_id, "genres": [], "cast": [], "directors": [], "cast_counts": {}, "total_cast": 0, "franchise": None}
     
     fetched = await asyncio.gather(*[fetch_and_cache(tid) for tid in missing])
     for doc in fetched:
