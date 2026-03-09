@@ -2293,7 +2293,8 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     total_db_movies = total_counts.get("total_movies", 1) or 1
     total_user_movies = len(history)
     
-    # Fetch IMDB data for all movies at once
+    # Fetch IMDB data for Bayesian expected ratings
+    title_map = {h["tmdb_id"]: h.get("title", "") for h in history}
     local_movies = {}
     for tmdb_id, title in title_map.items():
         if title:
@@ -2304,10 +2305,8 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
             if local:
                 local_movies[tmdb_id] = local
     
-    # Compute global mean IMDB rating and Bayesian prior
-    # Using m=1000 as minimum votes for full weight (Bayesian shrinkage)
-    GLOBAL_MEAN = 6.5  # Approximate IMDB global mean
-    BAYESIAN_M = 1000  # Minimum votes for full confidence
+    GLOBAL_MEAN = 6.5
+    BAYESIAN_M = 1000
     
     def bayesian_expected(imdb_rating, imdb_votes):
         """Shrink IMDB rating toward global mean for movies with few votes."""
