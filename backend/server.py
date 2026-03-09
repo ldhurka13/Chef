@@ -658,15 +658,24 @@ async def calculate_rewatchability_multiplier(
     
     last_watched = watch_entry.get("last_watched_date")
     if isinstance(last_watched, str):
-        last_watched = datetime.fromisoformat(last_watched.replace('Z', '+00:00'))
-    elif isinstance(last_watched, datetime) and last_watched.tzinfo is None:
-        # Make timezone-aware if it's naive
-        last_watched = last_watched.replace(tzinfo=timezone.utc)
-    
-    if not isinstance(last_watched, datetime):
+        try:
+            last_watched = datetime.fromisoformat(last_watched.replace('Z', '+00:00'))
+        except ValueError:
+            # If parsing fails, return default multiplier
+            return 1.0
+    elif isinstance(last_watched, datetime):
+        if last_watched.tzinfo is None:
+            # Make timezone-aware if it's naive
+            last_watched = last_watched.replace(tzinfo=timezone.utc)
+    else:
+        # If not a datetime or string, return default multiplier
         return 1.0
     
-    days_since = (datetime.now(timezone.utc) - last_watched).days
+    try:
+        days_since = (datetime.now(timezone.utc) - last_watched).days
+    except TypeError:
+        # If there's still a timezone issue, return default multiplier
+        return 1.0
     user_rating = watch_entry.get("user_rating", 5)
     
     # Get release year
