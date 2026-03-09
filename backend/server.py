@@ -2288,7 +2288,12 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
         {"user_id": current_user["id"]}, {"_id": 0}
     )
     if cached:
-        return {"genres": cached["genres"], "actors": cached["actors"], "directors": cached["directors"]}
+        return {
+            "genres": cached["genres"], 
+            "actors": cached["actors"], 
+            "directors": cached["directors"],
+            "stats": cached.get("stats", {})
+        }
     
     # Get diary entries
     history = await db.watch_history.find(
