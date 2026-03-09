@@ -1960,7 +1960,8 @@ async def delete_watch_entry(tmdb_id: int, watch_id: str, current_user: dict = D
 # ============ PROFILE INSIGHTS (CACHED) ============
 
 async def _get_movie_metadata(tmdb_ids: list) -> dict:
-    """Get genres/cast/crew for movies, using MongoDB cache first, TMDB API for misses."""
+    """Get genres/cast/crew for movies, using MongoDB cache first, TMDB API for misses.
+    Now includes cast order and popularity for actor impact calculation."""
     result = {}
     
     # Batch read from cache
@@ -1992,16 +1993,46 @@ async def _get_movie_metadata(tmdb_ids: list) -> dict:
                 credits = cr.json() if cr.status_code == 200 else {}
                 
                 genres = [{"id": g["id"], "name": g["name"]} for g in details.get("genres", [])]
-                cast = [{"name": a["name"], "profile_path": a.get("profile_path")} for a in (credits.get("cast") or [])[:5]]
-                directors = [{"name": c["name"], "profile_path": c.get("profile_path")} for c in (credits.get("crew") or []) if c.get("job") == "Director"]
                 
-                doc = {"tmdb_id": tmdb_id, "genres": genres, "cast": cast, "directors": directors}
+                # Enhanced cast data with order and popularity for actor impact
+                raw_cast = credits.get("cast") or []
+                cast = [
+                    {
+                        "name": a["name"], 
+                        "profile_path": a.get("profile_path"),
+                        "order": a.get("order", i),  # Billing order
+                        "popularity": a.get("popularity", 0),  # TMDB popularity
+                        "character": a.get("character", ""),
+                    } 
+                    for i, a in enumerate(raw_cast[:15])  # Store top 15 for analysis
+                ]
+                
+                directors = [
+                    {
+                        "name": c["name"], 
+                        "profile_path": c.get("profile_path"),
+                        "popularity": c.get("popularity", 0)
+                    } 
+                    for c in (credits.get("crew") or []) if c.get("job") == "Director"
+                ]
+                
+                # Count cast by role for this movie
+                cast_role_counts = count_cast_by_role(cast)
+                
+                doc = {
+                    "tmdb_id": tmdb_id, 
+                    "genres": genres, 
+                    "cast": cast, 
+                    "directors": directors,
+                    "cast_counts": cast_role_counts,
+                    "total_cast": len(raw_cast)
+                }
                 await db.movie_metadata.update_one(
                     {"tmdb_id": tmdb_id}, {"$set": doc}, upsert=True
                 )
                 return doc
             except Exception:
-                return {"tmdb_id": tmdb_id, "genres": [], "cast": [], "directors": []}
+                return {"tmdb_id": tmdb_id, "genres": [], "cast": [], "directors": [], "cast_counts": {}, "total_cast": 0}
     
     fetched = await asyncio.gather(*[fetch_and_cache(tid) for tid in missing])
     for doc in fetched:
