@@ -1062,22 +1062,46 @@ def compute_familiarity_boost(movie_metadata: dict, familiarity_data: dict) -> f
         if dir_matches:
             director_familiarity = max(dir_matches)  # Use highest match for directors
     
-    # Calculate actor familiarity (top 5 cast)
-    movie_cast = movie_metadata.get("cast", [])[:5]
+    # Calculate actor familiarity (top 5 cast) WITH ACTOR IMPACT
+    movie_cast = movie_metadata.get("cast", [])[:15]  # Get more cast for impact calc
     actor_familiarity = 0.0
     if movie_cast:
-        actor_matches = []
+        # Get cast role counts
+        cast_counts = movie_metadata.get("cast_counts", count_cast_by_role(movie_cast))
+        num_leads = cast_counts.get("num_leads", 3)
+        num_supporting = cast_counts.get("num_supporting", 7)
+        total_cast = movie_metadata.get("total_cast", len(movie_cast))
+        
+        actor_weighted_matches = []
         for a in movie_cast:
             name = a.get("name") if isinstance(a, dict) else a
             if name and name in actor_scores:
-                actor_matches.append(actor_scores[name] / max_actor)
-        if actor_matches:
-            actor_familiarity = sum(actor_matches) / len(actor_matches)
+                # Get actor's order for impact calculation
+                actor_order = a.get("order", 99) if isinstance(a, dict) else 99
+                actor_popularity = a.get("popularity", 0) if isinstance(a, dict) else 0
+                
+                # Calculate impact for this actor
+                impact = calculate_actor_impact(
+                    actor_order=actor_order,
+                    total_cast=total_cast,
+                    num_leads=num_leads,
+                    num_supporting=num_supporting,
+                    actor_filmography_count=actor_scores[name],  # Use count as proxy for experience
+                    actor_popularity=actor_popularity
+                )
+                
+                # Weight the familiarity score by actor impact
+                base_familiarity = actor_scores[name] / max_actor
+                weighted_familiarity = base_familiarity * impact["final_impact"]
+                actor_weighted_matches.append(weighted_familiarity)
+        
+        if actor_weighted_matches:
+            actor_familiarity = sum(actor_weighted_matches) / len(actor_weighted_matches)
     
-    # Weighted combination: directors count most, then genres, then actors
-    # Weights: director 40%, genre 35%, actors 25%
+    # Weighted combination: directors count most, then actors (now impact-weighted), then genres
+    # Updated weights: director 35%, actors 35% (increased due to impact weighting), genre 30%
     total_familiarity = (
-        director_familiarity * 0.40 +
+        director_familiarity * 0.35 +
         genre_familiarity * 0.35 +
         actor_familiarity * 0.25
     )
