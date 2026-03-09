@@ -534,7 +534,7 @@ class FlickBackendTester:
 
     def test_profile_insights(self):
         """Test profile insights endpoint with proportion-based scoring and franchise deduplication"""
-        success, data, error = self.make_request("GET", "/user/profile-insights")
+        success, data, error = self.make_request("GET", "/user/profile-insights", auth_required=True)
         
         if success and data:
             # Check for required top-level fields
