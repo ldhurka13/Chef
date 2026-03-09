@@ -2490,51 +2490,90 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     
     # ============ RANKING WITH PROPORTION SCORES ============
     
-    def rank_genres(scores_dict, limit=5):
-        ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
+    def rank_genres_with_proportion(scores_dict, limit=5):
+        genre_totals = total_counts.get("genres", {})
+        
+        scored = []
+        for name, data in scores_dict.items():
+            total_available = genre_totals.get(name, 1)
+            proportion = calculate_proportion_score(
+                data["count"], total_available, effective_total, total_db_movies
+            )
+            # Final score combines weight and proportion
+            final_score = data["total_weight"] * (1 + 0.3 * (proportion - 1))  # Boost/penalize by proportion
+            scored.append((name, data, proportion, final_score))
+        
+        ranked = sorted(scored, key=lambda x: x[3], reverse=True)
         return [
             {
                 "name": name,
-                "score": round(data["total_weight"], 1),
+                "score": round(final_score, 1),
+                "raw_score": round(data["total_weight"], 1),
                 "count": data["count"],
+                "proportion_index": round(proportion, 2),  # >1 = above average preference
                 "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
-                "avg_expected": round(data["total_expected"] / data["count"], 1) if data["count"] else 0,
+                "franchise_count": data.get("franchise_count", 0),
+                "standalone_count": data.get("standalone_count", 0),
             }
-            for name, data in ranked[:limit]
+            for name, data, proportion, final_score in ranked[:limit]
         ]
     
-    def rank_actors(scores_dict, limit=5):
-        """Rank actors using impact-weighted scores."""
-        ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
+    def rank_actors_with_proportion(scores_dict, limit=5):
+        actor_totals = total_counts.get("actors", {})
+        
+        scored = []
+        for name, data in scores_dict.items():
+            total_available = actor_totals.get(name, 1)
+            proportion = calculate_proportion_score(
+                data["count"], total_available, effective_total, total_db_movies
+            )
+            final_score = data["total_weight"] * (1 + 0.2 * (proportion - 1))
+            scored.append((name, data, proportion, final_score))
+        
+        ranked = sorted(scored, key=lambda x: x[3], reverse=True)
         return [
             {
                 "name": name,
-                "score": round(data["total_weight"], 1),
+                "score": round(final_score, 1),
+                "raw_score": round(data["total_weight"], 1),
                 "count": data["count"],
+                "proportion_index": round(proportion, 2),
                 "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
-                "avg_expected": round(data["total_expected"] / data["count"], 1) if data["count"] else 0,
                 "profile_path": data.get("profile_path"),
-                "avg_impact": round(data["total_impact"] / data["count"], 3) if data["count"] else 0,
+                "avg_impact": round(data["total_impact"] / max(data["count"], 1), 3),
                 "roles": data.get("roles", {}),
                 "primary_role": max(data.get("roles", {"lead": 0}), key=data.get("roles", {"lead": 0}).get),
-                "filmography_count": data.get("filmography_in_diary", 0),
-                "avg_popularity": round(data["avg_popularity"] / data["count"], 1) if data["count"] else 0,
+                "franchise_appearances": data.get("franchise_appearances", 0),
+                "standalone_appearances": data.get("standalone_appearances", 0),
             }
-            for name, data in ranked[:limit]
+            for name, data, proportion, final_score in ranked[:limit]
         ]
     
-    def rank_directors(scores_dict, limit=5):
-        ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
+    def rank_directors_with_proportion(scores_dict, limit=5):
+        director_totals = total_counts.get("directors", {})
+        
+        scored = []
+        for name, data in scores_dict.items():
+            total_available = director_totals.get(name, 1)
+            proportion = calculate_proportion_score(
+                data["count"], total_available, effective_total, total_db_movies
+            )
+            final_score = data["total_weight"] * (1 + 0.25 * (proportion - 1))
+            scored.append((name, data, proportion, final_score))
+        
+        ranked = sorted(scored, key=lambda x: x[3], reverse=True)
         return [
             {
                 "name": name,
-                "score": round(data["total_weight"], 1),
+                "score": round(final_score, 1),
+                "raw_score": round(data["total_weight"], 1),
                 "count": data["count"],
+                "proportion_index": round(proportion, 2),
                 "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
-                "avg_expected": round(data["total_expected"] / data["count"], 1) if data["count"] else 0,
-                "profile_path": data.get("profile_path"),
+                "franchise_count": data.get("franchise_count", 0),
+                "standalone_count": data.get("standalone_count", 0),
             }
-            for name, data in ranked[:limit]
+            for name, data, proportion, final_score in ranked[:limit]
         ]
     
     result = {
