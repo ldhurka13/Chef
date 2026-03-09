@@ -19,6 +19,7 @@ class FlickBackendTester:
         self.test_results = []
         self.failed_tests = []
         self.passed_tests = []
+        self.auth_token = None
         
     def log_result(self, test_name: str, success: bool, details: str = "", response_data: dict = None):
         """Log test result"""
