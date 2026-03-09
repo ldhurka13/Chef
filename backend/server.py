@@ -262,6 +262,147 @@ def get_genres() -> Dict[int, str]:
 
 GENRE_MAP = {}
 
+# ============ ACTOR IMPACT ALGORITHM ============
+# Role classification thresholds based on cast order
+LEAD_ACTOR_THRESHOLD = 3      # Order 0-2 are leads (top 3 billed)
+SUPPORTING_ACTOR_THRESHOLD = 10  # Order 3-9 are supporting
+
+def classify_actor_role(order: int, total_cast: int) -> str:
+    """
+    Classify actor role based on billing order.
+    Returns: 'lead', 'supporting', or 'background'
+    """
+    if order < LEAD_ACTOR_THRESHOLD:
+        return 'lead'
+    elif order < SUPPORTING_ACTOR_THRESHOLD:
+        return 'supporting'
+    return 'background'
+
+def calculate_actor_impact(
+    actor_order: int,
+    total_cast: int,
+    num_leads: int = 3,
+    num_supporting: int = 7,
+    actor_filmography_count: int = 1,
+    actor_popularity: float = 0.0
+) -> dict:
+    """
+    Calculate an actor's impact on a movie based on:
+    - Role (lead/supporting/background)
+    - Number of actors in each role category
+    - Actor's experience (filmography count)
+    - Actor's popularity
+    
+    Returns dict with role, base_impact, adjusted_impact, and final_impact
+    """
+    # Base impact weights
+    BASE_LEAD_IMPACT = 1.0
+    BASE_SUPPORTING_IMPACT = 0.5
+    BASE_BACKGROUND_IMPACT = 0.15
+    
+    # Classify role
+    role = classify_actor_role(actor_order, total_cast)
+    
+    # Calculate divisor based on role
+    num_background = max(total_cast - num_leads - num_supporting, 1)
+    
+    if role == 'lead':
+        base_impact = BASE_LEAD_IMPACT
+        divisor = max(num_leads, 1)
+    elif role == 'supporting':
+        base_impact = BASE_SUPPORTING_IMPACT
+        divisor = max(num_leads + num_supporting, 1)
+    else:  # background
+        base_impact = BASE_BACKGROUND_IMPACT
+        divisor = max(num_leads + num_supporting + num_background, 1)
+    
+    # Adjusted impact by role count
+    adjusted_impact = base_impact / divisor
+    
+    # Experience multiplier (logarithmic scale to prevent extreme values)
+    # An actor with 50+ films gets ~2x boost, 10 films ~1.5x
+    import math
+    experience_multiplier = 1.0 + (math.log10(max(actor_filmography_count, 1) + 1) * 0.5)
+    
+    # Popularity multiplier (normalized 0-1 scale, TMDB popularity is usually 0-100+)
+    # Cap at 2x for extremely popular actors
+    popularity_multiplier = 1.0 + min(actor_popularity / 100.0, 1.0)
+    
+    # Final impact combines all factors
+    final_impact = adjusted_impact * experience_multiplier * popularity_multiplier
+    
+    return {
+        "role": role,
+        "order": actor_order,
+        "base_impact": round(base_impact, 3),
+        "divisor": divisor,
+        "adjusted_impact": round(adjusted_impact, 3),
+        "experience_multiplier": round(experience_multiplier, 3),
+        "popularity_multiplier": round(popularity_multiplier, 3),
+        "final_impact": round(final_impact, 4)
+    }
+
+def count_cast_by_role(cast_list: list) -> dict:
+    """
+    Count actors in each role category from a cast list.
+    Cast list should have 'order' field from TMDB.
+    """
+    num_leads = sum(1 for c in cast_list if c.get("order", 999) < LEAD_ACTOR_THRESHOLD)
+    num_supporting = sum(1 for c in cast_list if LEAD_ACTOR_THRESHOLD <= c.get("order", 999) < SUPPORTING_ACTOR_THRESHOLD)
+    num_background = sum(1 for c in cast_list if c.get("order", 999) >= SUPPORTING_ACTOR_THRESHOLD)
+    
+    return {
+        "num_leads": max(num_leads, 1),  # At least 1 to avoid division by zero
+        "num_supporting": max(num_supporting, 0),
+        "num_background": max(num_background, 0),
+        "total": len(cast_list)
+    }
+
+async def get_actor_stats(actor_name: str) -> dict:
+    """
+    Get actor's filmography count and popularity from local DB or TMDB.
+    Returns dict with filmography_count and popularity.
+    """
+    # First check local movies DB for filmography count
+    filmography_count = await db.movies.count_documents({
+        "stars": {"$regex": f"^{actor_name}$", "$options": "i"}
+    })
+    
+    # Try TMDB search for popularity if we have API key
+    popularity = 0.0
+    tmdb_api_key = os.environ.get("TMDB_API_KEY")
+    if tmdb_api_key and filmography_count < 5:
+        # Only hit TMDB if local data is sparse
+        try:
+            res = requests.get(
+                f"{TMDB_BASE_URL}/search/person",
+                params={"api_key": tmdb_api_key, "query": actor_name},
+                timeout=5
+            )
+            if res.status_code == 200:
+                results = res.json().get("results", [])
+                if results:
+                    popularity = results[0].get("popularity", 0.0)
+                    # Also update filmography count from TMDB
+                    known_for = results[0].get("known_for", [])
+                    filmography_count = max(filmography_count, len(known_for))
+        except:
+            pass
+    
+    return {
+        "filmography_count": filmography_count,
+        "popularity": popularity
+    }
+
+# Actor stats cache to avoid repeated lookups
+_actor_stats_cache = {}
+
+async def get_cached_actor_stats(actor_name: str) -> dict:
+    """Cached version of get_actor_stats."""
+    if actor_name not in _actor_stats_cache:
+        _actor_stats_cache[actor_name] = await get_actor_stats(actor_name)
+    return _actor_stats_cache[actor_name]
+
 # Genre categorization for complexity/mood
 LOW_ENERGY_GENRES = {"Documentary", "History", "War", "Drama"}
 HIGH_ENERGY_GENRES = {"Animation", "Comedy", "Adventure", "Action"}
