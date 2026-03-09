@@ -1230,6 +1230,33 @@ const ProfileTab = ({ user, onUserUpdate }) => {
         </div>
       ) : (
         <>
+          {/* Stats Summary */}
+          {insights?.stats && (
+            <div className="mb-6 p-4 rounded-xl bg-chef-surface/30 border border-white/5">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-6 text-xs">
+                  <div className="text-center">
+                    <p className="text-chef-platinum font-semibold text-lg">{insights.stats.total_movies_watched || 0}</p>
+                    <p className="text-chef-muted">Total Films</p>
+                  </div>
+                  <div className="w-px h-8 bg-white/10" />
+                  <div className="text-center">
+                    <p className="text-chef-teal font-semibold text-lg">{insights.stats.franchises_watched || 0}</p>
+                    <p className="text-chef-muted">Franchises</p>
+                  </div>
+                  <div className="w-px h-8 bg-white/10" />
+                  <div className="text-center">
+                    <p className="text-chef-gold font-semibold text-lg">{insights.stats.standalone_movies || 0}</p>
+                    <p className="text-chef-muted">Standalone</p>
+                  </div>
+                </div>
+                <div className="text-[10px] text-chef-muted/50 bg-chef-bg/50 px-3 py-1.5 rounded-full">
+                  Franchises count as 1 entry for fair scoring
+                </div>
+              </div>
+            </div>
+          )}
+
           <Section title="Top Genres" icon={Heart} subtitle="Ranked by your watch history and ratings">
             <RankedList items={insights?.genres} />
           </Section>
