@@ -213,7 +213,7 @@ class FlickBackendTester:
 
     def test_watch_history(self):
         """Test getting watch history"""
-        success, data, error = self.make_request("GET", "/user/watch-history")
+        success, data, error = self.make_request("GET", "/user/watch-history", auth_required=True)
         
         if success:
             if isinstance(data, list):
