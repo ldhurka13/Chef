@@ -52,33 +52,27 @@ Build a context-aware movie recommendation engine called "Chef" with React front
    - Example: Mark Ruffalo's 9 Avengers movies count as 1 franchise entry
    - Uses TMDB `belongs_to_collection` data
 
-#### Profile Insights Response Structure
-```json
-{
-  "genres": [{
-    "name": "Drama",
-    "score": 45.2,
-    "raw_score": 42.1,
-    "proportion_index": 1.23,
-    "franchise_count": 2,
-    "standalone_count": 15
-  }],
-  "actors": [{
-    "name": "Robert Downey Jr.",
-    "score": 38.5,
-    "proportion_index": 1.45,
-    "avg_impact": 0.892,
-    "primary_role": "lead",
-    "franchise_appearances": 3,
-    "standalone_appearances": 5
-  }],
-  "stats": {
-    "total_movies_watched": 150,
-    "effective_entries": 120,
-    "franchises_watched": 8,
-    "standalone_movies": 112
-  }
-}
+4. **UI Display of Proportion Metrics** (March 9, 2026)
+   - Profile tab now shows proportion percentage badges
+   - Green badges: "+X% vs avg" for above-average preferences
+   - Amber badges: "-X% vs avg" for below-average preferences
+   - Actor role badges: Lead (gold), Supporting (teal), Background (gray)
+   - Stats summary: Total Films, Franchises, Standalone counts
+   - Franchise/Standalone breakdown: "(2F/15S)" notation
+
+#### Profile Insights UI Display
+```
+Top Genres:
+1. Science Fiction  |  66 films  |  +20397% vs avg  (green badge)
+2. Drama           |  157 films |  -12% vs avg     (amber badge)
+3. Adventure       |  83 films  |  +144% vs avg    (green badge)
+
+Top Actors:
+1. Leonardo DiCaprio  |  14 films  |  +3991% vs avg  |  Background (badge)
+2. Brad Pitt          |  13 films  |  +2457% vs avg  |  Background (badge)
+
+Stats Summary:
+Total Films: 322  |  Franchises: 0  |  Standalone: 322
 ```
 
 ## Prioritized Backlog
@@ -89,7 +83,7 @@ Build a context-aware movie recommendation engine called "Chef" with React front
 ### P1 (High Priority)
 - [ ] Refactor server.py into modular structure (routers, models, services)
 - [ ] Add "Your Lead Actors" recommendation carousel
-- [ ] Display franchise breakdowns in UI
+- [ ] Refresh movie metadata to get proper cast order (for accurate role classification)
 
 ### P2 (Medium Priority)
 - [ ] JustWatch API integration for streaming availability
@@ -108,7 +102,7 @@ Build a context-aware movie recommendation engine called "Chef" with React front
 - `POST /api/auth/import-letterboxd` - Zip file import
 
 ## Database Collections
-- `users` - User accounts
+- `users` / `auth_users` - User accounts
 - `movies` - Local IMDB data (33K entries)
 - `watch_history` - User diary with watches array
 - `watchlist` - User's to-watch list
@@ -116,10 +110,11 @@ Build a context-aware movie recommendation engine called "Chef" with React front
 - `profile_insights_cache` - Computed user preferences
 
 ## Next Tasks
-1. Test proportion scoring with real user data
-2. Consider UI updates to show proportion_index values
-3. Add franchise badges to movie cards
+1. Refresh movie metadata cache to get proper cast order for existing entries
+2. Consider adding franchise grouping to recommendation sections
+3. Monitor proportion calculation performance with large datasets
 
 ## Testing Status
 - Backend: 100% (18 tests passed)
-- Last test: iteration_16.json
+- Frontend: 100% (18 tests passed)  
+- Last test: iteration_17.json
