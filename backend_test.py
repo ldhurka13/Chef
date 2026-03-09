@@ -762,10 +762,10 @@ class FlickBackendTester:
         
         # Test enhanced profile insights functionality (requires auth)
         if auth_success:
-            self.test_profile_insights()
+            insights_data = self.test_profile_insights()
             self.test_movie_metadata_caching()
-            self.test_proportion_scoring_algorithm()
-            self.test_franchise_deduplication()
+            self.test_proportion_scoring_algorithm(insights_data)
+            self.test_franchise_deduplication(insights_data)
         
         # Test genres
         self.test_genres_endpoint()
