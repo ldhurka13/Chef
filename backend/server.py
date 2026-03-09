@@ -2259,7 +2259,12 @@ async def _invalidate_insights_cache(user_id: str):
 
 @api_router.get("/user/profile-insights")
 async def get_profile_insights(current_user: dict = Depends(get_current_user)):
-    """Return cached top 5 genres, actors, directors. Recomputes only when diary changes."""
+    """
+    Return cached top 5 genres, actors, directors with:
+    - Proportion-based scoring (normalized by availability)
+    - Franchise deduplication (MCU movies count as 1 entity)
+    - Actor impact weighting (lead > supporting > background)
+    """
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -2273,34 +2278,20 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     # Get diary entries
     history = await db.watch_history.find(
         {"user_id": current_user["id"]},
-        {"_id": 0, "tmdb_id": 1, "user_rating": 1, "watch_count": 1, "watches": 1}
+        {"_id": 0, "tmdb_id": 1, "user_rating": 1, "watch_count": 1, "watches": 1, "title": 1}
     ).to_list(500)
     
     if not history:
         return {"genres": [], "actors": [], "directors": []}
     
-    # Also get local IMDB data for these movies (for preference computation)
+    # Get metadata for all movies (includes franchise info)
     tmdb_ids = [h["tmdb_id"] for h in history]
     metadata = await _get_movie_metadata(tmdb_ids)
     
-    # Build title→local_movie lookup for IMDB ratings
-    # We need to match diary movies to local IMDB data by title+year
-    titles_years = set()
-    for h in history:
-        meta = metadata.get(h["tmdb_id"], {})
-        # Try to get title from metadata or from history doc
-        title = None
-        for g in meta.get("genres", []):
-            pass  # just checking metadata exists
-        titles_years.add(h["tmdb_id"])
-    
-    # Batch lookup local IMDB data by title for all diary movies
-    # First get titles from watch_history
-    history_full = await db.watch_history.find(
-        {"user_id": current_user["id"]},
-        {"_id": 0, "tmdb_id": 1, "title": 1}
-    ).to_list(500)
-    title_map = {h["tmdb_id"]: h.get("title", "") for h in history_full}
+    # Get total counts for proportion calculation
+    total_counts = await get_total_counts()
+    total_db_movies = total_counts.get("total_movies", 1) or 1
+    total_user_movies = len(history)
     
     # Fetch IMDB data for all movies at once
     local_movies = {}
