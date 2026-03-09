@@ -1,0 +1,92 @@
+{
+  "timestamp": "2026-03-09T01:57:14.905618",
+  "total_tests": 14,
+  "passed_tests": 14,
+  "success_rate": 100.0,
+  "test_details": [
+    {
+      "test": "API Health Check",
+      "passed": true,
+      "details": "API responding: Chef - Context-Aware Movie Recommendations",
+      "response_data": null
+    },
+    {
+      "test": "Trending Movies API",
+      "passed": true,
+      "details": "Returned 10 movies",
+      "response_data": null
+    },
+    {
+      "test": "Movie Data Structure",
+      "passed": true,
+      "details": "All expected fields present",
+      "response_data": null
+    },
+    {
+      "test": "Test User Registration",
+      "passed": true,
+      "details": "User ID: 00d28124-e44b-4917-b89e-926d6a3ed1e3",
+      "response_data": null
+    },
+    {
+      "test": "Profile Insights API",
+      "passed": true,
+      "details": "Returned expected structure",
+      "response_data": null
+    },
+    {
+      "test": "Actor Impact Metrics",
+      "passed": true,
+      "details": "No actors in history (expected for new user)",
+      "response_data": null
+    },
+    {
+      "test": "Movie Metadata Enhancement",
+      "passed": true,
+      "details": "Movies have enhanced metadata",
+      "response_data": null
+    },
+    {
+      "test": "Movie Metadata Caching",
+      "passed": true,
+      "details": "Metadata caching system is integrated",
+      "response_data": null
+    },
+    {
+      "test": "Curated Recommendations API",
+      "passed": true,
+      "details": "Returned 10 recommendations",
+      "response_data": null
+    },
+    {
+      "test": "Recommendation Scoring",
+      "passed": true,
+      "details": "Recommendations include scoring metrics",
+      "response_data": null
+    },
+    {
+      "test": "Actor Role Classification - Al Pacino",
+      "passed": true,
+      "details": "Primary role: lead, Roles: {'lead': 1, 'supporting': 0, 'background': 0}",
+      "response_data": null
+    },
+    {
+      "test": "Actor Role Classification - Marlon Brando",
+      "passed": true,
+      "details": "Primary role: lead, Roles: {'lead': 1, 'supporting': 0, 'background': 0}",
+      "response_data": null
+    },
+    {
+      "test": "Actor Role Classification - James Caan",
+      "passed": true,
+      "details": "Primary role: lead, Roles: {'lead': 1, 'supporting': 0, 'background': 0}",
+      "response_data": null
+    },
+    {
+      "test": "Actor Role Classification System",
+      "passed": true,
+      "details": "Role classification working correctly",
+      "response_data": null
+    }
+  ]
+}
