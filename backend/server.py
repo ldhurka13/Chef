@@ -2396,101 +2396,99 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     # Effective total (accounting for franchises as 1)
     effective_total = len(processed_entries)
     
-    for h in history:
-        watches = h.get("watches", [])
-        user_avg = (sum(w.get("rating", 0) for w in watches) / len(watches)) if watches else h.get("user_rating", 5.0)
-        watch_count = h.get("watch_count", 1) or 1
-        
-        # Get expected rating (Bayesian-adjusted IMDB rating)
-        local = local_movies.get(h["tmdb_id"])
-        expected = bayesian_expected(
-            local.get("imdb_rating") if local else None,
-            local.get("imdb_votes") if local else None
-        )
-        
-        # Preference signal: how much the user liked it vs expected
-        preference = user_avg - expected
-        
-        # Weight: preference signal boosted by rewatch frequency
-        # A positive preference means the user liked it more than average
-        # Multiply by a base factor to keep scores meaningful even for neutral preferences
+    for entry in processed_entries:
+        preference = entry["preference"]
+        watch_count = entry.get("watch_count", 1)
         rewatch_boost = 1 + 0.15 * (watch_count - 1)
-        base_weight = (preference + 3.0) * rewatch_boost  # +3 shift so slightly-liked movies still contribute positively
+        base_weight = (preference + 3.0) * rewatch_boost
         
-        meta = metadata.get(h["tmdb_id"], {})
+        # Process genres
+        for genre_name in entry["genres"]:
+            if not genre_name:
+                continue
+            if genre_name not in genre_scores:
+                genre_scores[genre_name] = {
+                    "total_weight": 0, "count": 0, "total_pref": 0,
+                    "franchise_count": 0, "standalone_count": 0
+                }
+            genre_scores[genre_name]["total_weight"] += base_weight
+            genre_scores[genre_name]["count"] += entry["effective_count"]
+            genre_scores[genre_name]["total_pref"] += preference
+            if entry["type"] == "franchise":
+                genre_scores[genre_name]["franchise_count"] += 1
+            else:
+                genre_scores[genre_name]["standalone_count"] += 1
         
-        for genre in meta.get("genres", []):
-            name = genre["name"]
-            if name not in genre_scores:
-                genre_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "total_expected": 0}
-            genre_scores[name]["total_weight"] += base_weight
-            genre_scores[name]["count"] += 1
-            genre_scores[name]["total_pref"] += preference
-            genre_scores[name]["total_expected"] += expected
-        
-        # Get cast role counts for actor impact calculation
-        cast_counts = meta.get("cast_counts", {})
+        # Process actors with impact weighting
+        cast_counts = entry.get("cast_counts", {})
         num_leads = cast_counts.get("num_leads", 3)
         num_supporting = cast_counts.get("num_supporting", 7)
-        total_cast = meta.get("total_cast", 15)
+        total_cast = entry.get("total_cast", 15)
         
-        # Process actors with impact-weighted scoring
-        for actor in meta.get("cast", []):
-            name = actor.get("name", "")
-            if not name:
+        for actor_name, actor_data in entry["actors"].items():
+            if not actor_name:
                 continue
             
-            # Track filmography count for this actor
-            actor_filmography[name] = actor_filmography.get(name, 0) + 1
+            # Track filmography (effective count, not raw movie count)
+            actor_filmography[actor_name] = actor_filmography.get(actor_name, 0) + entry["effective_count"]
             
-            # Calculate actor's impact on this movie
-            actor_order = actor.get("order", 99)
-            actor_popularity = actor.get("popularity", 0)
+            # Calculate impact
+            actor_order = actor_data.get("order", 99) if isinstance(actor_data, dict) else 99
+            actor_popularity = actor_data.get("popularity", 0) if isinstance(actor_data, dict) else 0
             
             impact_data = calculate_actor_impact(
                 actor_order=actor_order,
                 total_cast=total_cast,
                 num_leads=num_leads,
                 num_supporting=num_supporting,
-                actor_filmography_count=actor_filmography[name],
+                actor_filmography_count=actor_filmography[actor_name],
                 actor_popularity=actor_popularity
             )
             
-            # Apply actor impact to weight
             actor_weight = base_weight * impact_data["final_impact"]
             
-            if name not in actor_scores:
-                actor_scores[name] = {
-                    "total_weight": 0, 
-                    "count": 0, 
-                    "total_pref": 0, 
-                    "total_expected": 0, 
-                    "profile_path": actor.get("profile_path"),
+            if actor_name not in actor_scores:
+                actor_scores[actor_name] = {
+                    "total_weight": 0, "count": 0, "total_pref": 0,
+                    "profile_path": actor_data.get("profile_path") if isinstance(actor_data, dict) else None,
                     "total_impact": 0,
                     "roles": {"lead": 0, "supporting": 0, "background": 0},
                     "avg_popularity": 0,
-                    "filmography_in_diary": 0
+                    "franchise_appearances": 0,
+                    "standalone_appearances": 0
                 }
             
-            actor_scores[name]["total_weight"] += actor_weight
-            actor_scores[name]["count"] += 1
-            actor_scores[name]["total_pref"] += preference
-            actor_scores[name]["total_expected"] += expected
-            actor_scores[name]["total_impact"] += impact_data["final_impact"]
-            actor_scores[name]["roles"][impact_data["role"]] += 1
-            actor_scores[name]["avg_popularity"] += actor_popularity
-            actor_scores[name]["filmography_in_diary"] = actor_filmography[name]
+            actor_scores[actor_name]["total_weight"] += actor_weight
+            actor_scores[actor_name]["count"] += entry["effective_count"]
+            actor_scores[actor_name]["total_pref"] += preference
+            actor_scores[actor_name]["total_impact"] += impact_data["final_impact"]
+            actor_scores[actor_name]["roles"][impact_data["role"]] += 1
+            actor_scores[actor_name]["avg_popularity"] += actor_popularity
+            
+            if entry["type"] == "franchise":
+                actor_scores[actor_name]["franchise_appearances"] += 1
+            else:
+                actor_scores[actor_name]["standalone_appearances"] += 1
         
-        for director in meta.get("directors", []):
-            name = director.get("name", "")
-            if not name:
+        # Process directors
+        directors_list = entry["directors"]
+        for director_name in directors_list:
+            if not director_name:
                 continue
-            if name not in director_scores:
-                director_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "total_expected": 0, "profile_path": director.get("profile_path")}
-            director_scores[name]["total_weight"] += base_weight
-            director_scores[name]["count"] += 1
-            director_scores[name]["total_pref"] += preference
-            director_scores[name]["total_expected"] += expected
+            if director_name not in director_scores:
+                director_scores[director_name] = {
+                    "total_weight": 0, "count": 0, "total_pref": 0,
+                    "franchise_count": 0, "standalone_count": 0
+                }
+            director_scores[director_name]["total_weight"] += base_weight
+            director_scores[director_name]["count"] += entry["effective_count"]
+            director_scores[director_name]["total_pref"] += preference
+            if entry["type"] == "franchise":
+                director_scores[director_name]["franchise_count"] += 1
+            else:
+                director_scores[director_name]["standalone_count"] += 1
+    
+    # ============ RANKING WITH PROPORTION SCORES ============
     
     def rank_genres(scores_dict, limit=5):
         ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
