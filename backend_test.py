@@ -696,11 +696,14 @@ class FlickBackendTester:
         # Test watch history management
         self.test_add_to_watch_history()
         
+        # Test enhanced profile insights functionality
+        self.test_profile_insights()
+        self.test_movie_metadata_caching()
+        self.test_proportion_scoring_algorithm()
+        self.test_franchise_deduplication()
+        
         # Test genres
         self.test_genres_endpoint()
-        
-        # Test new feeling search functionality
-        self.test_feeling_search()
         
         # Print summary
         print("=" * 60)
