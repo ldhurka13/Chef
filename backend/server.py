@@ -659,6 +659,12 @@ async def calculate_rewatchability_multiplier(
     last_watched = watch_entry.get("last_watched_date")
     if isinstance(last_watched, str):
         last_watched = datetime.fromisoformat(last_watched.replace('Z', '+00:00'))
+    elif isinstance(last_watched, datetime) and last_watched.tzinfo is None:
+        # Make timezone-aware if it's naive
+        last_watched = last_watched.replace(tzinfo=timezone.utc)
+    
+    if not isinstance(last_watched, datetime):
+        return 1.0
     
     days_since = (datetime.now(timezone.utc) - last_watched).days
     user_rating = watch_entry.get("user_rating", 5)
