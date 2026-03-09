@@ -1056,19 +1056,21 @@ const ProfileTab = ({ user, onUserUpdate }) => {
       return <p className="text-sm text-chef-muted/40 ml-1">Not enough watch data yet</p>;
     }
     
-    // Helper to format preference as percentage with 2 decimal places
-    const formatPreference = (avgPreference, avgExpected) => {
-      if (avgPreference === undefined || avgExpected === undefined || avgExpected === 0) return null;
-      // Percentage increase = (preference / expected) * 100
-      const percentChange = (avgPreference / avgExpected) * 100;
-      return Math.abs(percentChange).toFixed(2);
+    // Helper to format proportion index as a readable percentage
+    const formatProportion = (proportionIndex) => {
+      if (proportionIndex === undefined || proportionIndex === null) return null;
+      // proportion_index > 1 means above average, < 1 means below average
+      const percentage = ((proportionIndex - 1) * 100).toFixed(0);
+      return {
+        value: Math.abs(percentage),
+        isAboveAverage: proportionIndex >= 1
+      };
     };
 
     return (
       <div className="space-y-2">
         {items.map((item, idx) => {
-          const percentValue = formatPreference(item.avg_preference, item.avg_expected);
-          const isPositive = item.avg_preference !== undefined ? item.avg_preference >= 0 : true;
+          const proportion = formatProportion(item.proportion_index);
           
           return (
             <div
@@ -1086,16 +1088,46 @@ const ProfileTab = ({ user, onUserUpdate }) => {
               ) : null}
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-chef-platinum font-medium truncate">{item.name}</p>
-                <p className="text-xs text-chef-muted">
-                  {item.count} movie{item.count !== 1 ? "s" : ""}
-                  {percentValue !== null && (
-                    <span className={`ml-2 inline-flex items-center gap-0.5 ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
-                      <span className="text-[10px]">{isPositive ? "▲" : "▼"}</span>
-                      {percentValue}%
+                <div className="flex items-center gap-2 text-xs text-chef-muted">
+                  <span>{item.count} film{item.count !== 1 ? "s" : ""}</span>
+                  {proportion && (
+                    <span 
+                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        proportion.isAboveAverage 
+                          ? "bg-emerald-500/20 text-emerald-400" 
+                          : "bg-amber-500/20 text-amber-400"
+                      }`}
+                      title={proportion.isAboveAverage 
+                        ? `You watch ${proportion.value}% more than average` 
+                        : `You watch ${proportion.value}% less than average`
+                      }
+                    >
+                      {proportion.isAboveAverage ? "+" : "-"}{proportion.value}% vs avg
                     </span>
                   )}
-                </p>
+                  {item.franchise_appearances > 0 && (
+                    <span className="text-chef-muted/50" title={`${item.franchise_appearances} from franchises, ${item.standalone_appearances} standalone`}>
+                      ({item.franchise_appearances}F/{item.standalone_appearances}S)
+                    </span>
+                  )}
+                  {item.franchise_count > 0 && !item.franchise_appearances && (
+                    <span className="text-chef-muted/50" title={`${item.franchise_count} from franchises, ${item.standalone_count} standalone`}>
+                      ({item.franchise_count}F/{item.standalone_count}S)
+                    </span>
+                  )}
+                </div>
               </div>
+              {item.primary_role && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  item.primary_role === 'lead' 
+                    ? 'bg-chef-gold/20 text-chef-gold' 
+                    : item.primary_role === 'supporting'
+                    ? 'bg-chef-teal/20 text-chef-teal'
+                    : 'bg-chef-muted/20 text-chef-muted'
+                }`}>
+                  {item.primary_role.charAt(0).toUpperCase() + item.primary_role.slice(1)}
+                </span>
+              )}
             </div>
           );
         })}
