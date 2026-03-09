@@ -2477,9 +2477,15 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
         ]
     
     result = {
-        "genres": rank_genres(genre_scores),
-        "actors": rank_actors(actor_scores),
-        "directors": rank_directors(director_scores),
+        "genres": rank_genres_with_proportion(genre_scores),
+        "actors": rank_actors_with_proportion(actor_scores),
+        "directors": rank_directors_with_proportion(director_scores),
+        "stats": {
+            "total_movies_watched": total_user_movies,
+            "effective_entries": effective_total,
+            "franchises_watched": len(grouped["franchises"]),
+            "standalone_movies": len(grouped["standalone"])
+        }
     }
     
     # Cache the result
