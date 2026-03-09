@@ -733,14 +733,20 @@ class FlickBackendTester:
         # Test basic connectivity
         self.test_root_endpoint()
         
+        # Test authentication first
+        auth_success = self.test_authentication()
+        if not auth_success:
+            print("⚠️  Authentication failed - some tests will be skipped")
+        
         # Test data initialization
         seed_success = self.test_seed_data()
         
-        # Test user endpoints
-        user_profile = self.test_user_profile()
-        watch_history = self.test_watch_history()
+        # Test user endpoints (require auth)
+        if auth_success:
+            user_profile = self.test_user_profile()
+            watch_history = self.test_watch_history()
         
-        # Test movie endpoints
+        # Test movie endpoints (public)
         trending_movies = self.test_trending_movies()
         discovered_movies = self.test_discover_movies()
         emergency_movies = self.test_emergency_recommendations()
@@ -748,14 +754,16 @@ class FlickBackendTester:
         # Test detailed movie info
         movie_details = self.test_movie_details()
         
-        # Test watch history management
-        self.test_add_to_watch_history()
+        # Test watch history management (requires auth)
+        if auth_success:
+            self.test_add_to_watch_history()
         
-        # Test enhanced profile insights functionality
-        self.test_profile_insights()
-        self.test_movie_metadata_caching()
-        self.test_proportion_scoring_algorithm()
-        self.test_franchise_deduplication()
+        # Test enhanced profile insights functionality (requires auth)
+        if auth_success:
+            self.test_profile_insights()
+            self.test_movie_metadata_caching()
+            self.test_proportion_scoring_algorithm()
+            self.test_franchise_deduplication()
         
         # Test genres
         self.test_genres_endpoint()
