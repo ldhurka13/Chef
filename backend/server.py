@@ -2119,6 +2119,9 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     actor_scores = {}
     director_scores = {}
     
+    # Track actor filmography for experience calculation
+    actor_filmography = {}
+    
     for h in history:
         watches = h.get("watches", [])
         user_avg = (sum(w.get("rating", 0) for w in watches) / len(watches)) if watches else h.get("user_rating", 5.0)
@@ -2138,7 +2141,7 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
         # A positive preference means the user liked it more than average
         # Multiply by a base factor to keep scores meaningful even for neutral preferences
         rewatch_boost = 1 + 0.15 * (watch_count - 1)
-        weight = (preference + 3.0) * rewatch_boost  # +3 shift so slightly-liked movies still contribute positively
+        base_weight = (preference + 3.0) * rewatch_boost  # +3 shift so slightly-liked movies still contribute positively
         
         meta = metadata.get(h["tmdb_id"], {})
         
@@ -2146,21 +2149,63 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
             name = genre["name"]
             if name not in genre_scores:
                 genre_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "total_expected": 0}
-            genre_scores[name]["total_weight"] += weight
+            genre_scores[name]["total_weight"] += base_weight
             genre_scores[name]["count"] += 1
             genre_scores[name]["total_pref"] += preference
             genre_scores[name]["total_expected"] += expected
         
+        # Get cast role counts for actor impact calculation
+        cast_counts = meta.get("cast_counts", {})
+        num_leads = cast_counts.get("num_leads", 3)
+        num_supporting = cast_counts.get("num_supporting", 7)
+        total_cast = meta.get("total_cast", 15)
+        
+        # Process actors with impact-weighted scoring
         for actor in meta.get("cast", []):
             name = actor.get("name", "")
             if not name:
                 continue
+            
+            # Track filmography count for this actor
+            actor_filmography[name] = actor_filmography.get(name, 0) + 1
+            
+            # Calculate actor's impact on this movie
+            actor_order = actor.get("order", 99)
+            actor_popularity = actor.get("popularity", 0)
+            
+            impact_data = calculate_actor_impact(
+                actor_order=actor_order,
+                total_cast=total_cast,
+                num_leads=num_leads,
+                num_supporting=num_supporting,
+                actor_filmography_count=actor_filmography[name],
+                actor_popularity=actor_popularity
+            )
+            
+            # Apply actor impact to weight
+            actor_weight = base_weight * impact_data["final_impact"]
+            
             if name not in actor_scores:
-                actor_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "total_expected": 0, "profile_path": actor.get("profile_path")}
-            actor_scores[name]["total_weight"] += weight
+                actor_scores[name] = {
+                    "total_weight": 0, 
+                    "count": 0, 
+                    "total_pref": 0, 
+                    "total_expected": 0, 
+                    "profile_path": actor.get("profile_path"),
+                    "total_impact": 0,
+                    "roles": {"lead": 0, "supporting": 0, "background": 0},
+                    "avg_popularity": 0,
+                    "filmography_in_diary": 0
+                }
+            
+            actor_scores[name]["total_weight"] += actor_weight
             actor_scores[name]["count"] += 1
             actor_scores[name]["total_pref"] += preference
             actor_scores[name]["total_expected"] += expected
+            actor_scores[name]["total_impact"] += impact_data["final_impact"]
+            actor_scores[name]["roles"][impact_data["role"]] += 1
+            actor_scores[name]["avg_popularity"] += actor_popularity
+            actor_scores[name]["filmography_in_diary"] = actor_filmography[name]
         
         for director in meta.get("directors", []):
             name = director.get("name", "")
@@ -2168,12 +2213,57 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
                 continue
             if name not in director_scores:
                 director_scores[name] = {"total_weight": 0, "count": 0, "total_pref": 0, "total_expected": 0, "profile_path": director.get("profile_path")}
-            director_scores[name]["total_weight"] += weight
+            director_scores[name]["total_weight"] += base_weight
             director_scores[name]["count"] += 1
             director_scores[name]["total_pref"] += preference
             director_scores[name]["total_expected"] += expected
     
-    def rank(scores_dict, limit=5):
+    def rank_genres(scores_dict, limit=5):
+        ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
+        return [
+            {
+                "name": name,
+                "score": round(data["total_weight"], 1),
+                "count": data["count"],
+                "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
+                "avg_expected": round(data["total_expected"] / data["count"], 1) if data["count"] else 0,
+            }
+            for name, data in ranked[:limit]
+        ]
+    
+    def rank_actors(scores_dict, limit=5):
+        """Rank actors using impact-weighted scores."""
+        ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
+        return [
+            {
+                "name": name,
+                "score": round(data["total_weight"], 1),
+                "count": data["count"],
+                "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
+                "avg_expected": round(data["total_expected"] / data["count"], 1) if data["count"] else 0,
+                "profile_path": data.get("profile_path"),
+                "avg_impact": round(data["total_impact"] / data["count"], 3) if data["count"] else 0,
+                "roles": data.get("roles", {}),
+                "primary_role": max(data.get("roles", {"lead": 0}), key=data.get("roles", {"lead": 0}).get),
+                "filmography_count": data.get("filmography_in_diary", 0),
+                "avg_popularity": round(data["avg_popularity"] / data["count"], 1) if data["count"] else 0,
+            }
+            for name, data in ranked[:limit]
+        ]
+    
+    def rank_directors(scores_dict, limit=5):
+        ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
+        return [
+            {
+                "name": name,
+                "score": round(data["total_weight"], 1),
+                "count": data["count"],
+                "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
+                "avg_expected": round(data["total_expected"] / data["count"], 1) if data["count"] else 0,
+                "profile_path": data.get("profile_path"),
+            }
+            for name, data in ranked[:limit]
+        ]
         ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
         return [
             {
