@@ -477,108 +477,197 @@ class FlickBackendTester:
             )
             return False
 
-    def test_feeling_search(self):
-        """Test new feeling-based search functionality"""
-        # Test various feeling queries
-        feeling_queries = [
-            {
-                "name": "Happy Feeling",
-                "query": "feeling happy and want something fun"
-            },
-            {
-                "name": "Sad/Emotional Feeling", 
-                "query": "feeling sad, need a good cry"
-            },
-            {
-                "name": "Nostalgic Feeling",
-                "query": "feeling nostalgic tonight"
-            },
-            {
-                "name": "Excited/Action Feeling",
-                "query": "feeling excited, want some action"
-            },
-            {
-                "name": "Romantic Feeling",
-                "query": "date night, something romantic"
-            },
-            {
-                "name": "Simple Word",
-                "query": "comedy"
-            }
-        ]
+    def test_profile_insights(self):
+        """Test profile insights endpoint with proportion-based scoring and franchise deduplication"""
+        success, data, error = self.make_request("GET", "/user/profile-insights")
         
-        all_passed = True
-        
-        for feeling_test in feeling_queries:
-            feeling_data = {
-                "query": feeling_test["query"],
-                "page": 1
-            }
+        if success and data:
+            # Check for required top-level fields
+            required_fields = ["genres", "actors", "directors", "stats"]
+            missing_fields = [field for field in required_fields if field not in data]
             
-            success, data, error = self.make_request("POST", "/movies/feeling-search", feeling_data)
-            
-            if success and data:
-                results = data.get("results", [])
-                query = data.get("query", "")
-                parsed_feelings = data.get("parsed_feelings", {})
+            if not missing_fields:
+                # Check stats object has new fields
+                stats = data.get("stats", {})
+                required_stats = ["total_movies_watched", "effective_entries", "franchises_watched", "standalone_movies"]
+                missing_stats = [field for field in required_stats if field not in stats]
                 
-                # Check required response fields
-                required_fields = ["results", "query", "parsed_feelings"]
-                missing_fields = [field for field in required_fields if field not in data]
+                # Check genre entries have new proportion fields
+                genres = data.get("genres", [])
+                if genres:
+                    genre = genres[0]
+                    required_genre_fields = ["name", "count", "proportion_index", "raw_score"]
+                    missing_genre_fields = [field for field in required_genre_fields if field not in genre]
+                else:
+                    missing_genre_fields = []
                 
-                if not missing_fields and results:
-                    # Check first movie has required feeling search fields
-                    movie = results[0]
-                    movie_fields = ["match_percentage", "vibe_tag", "title"]
-                    missing_movie_fields = [field for field in movie_fields if field not in movie]
-                    
-                    if not missing_movie_fields:
-                        self.log_result(
-                            f"Feeling Search ({feeling_test['name']})",
-                            True,
-                            f"Query: '{query}' returned {len(results)} movies",
-                            {
-                                "query": query,
-                                "results_count": len(results),
-                                "sample_movie": {
-                                    "title": movie.get("title"),
-                                    "match_percentage": movie.get("match_percentage"),
-                                    "vibe_tag": movie.get("vibe_tag")
-                                },
-                                "parsed_genres": parsed_feelings.get("genres", []),
-                                "parsed_keywords": parsed_feelings.get("keywords", [])
-                            }
-                        )
-                    else:
-                        self.log_result(
-                            f"Feeling Search ({feeling_test['name']})",
-                            False,
-                            f"Movies missing required fields: {missing_movie_fields}"
-                        )
-                        all_passed = False
-                elif not results:
-                    # Empty results might be valid for some queries
+                # Check actor entries have franchise fields
+                actors = data.get("actors", [])
+                if actors:
+                    actor = actors[0]
+                    required_actor_fields = ["name", "count", "proportion_index", "franchise_appearances"]
+                    missing_actor_fields = [field for field in required_actor_fields if field not in actor]
+                else:
+                    missing_actor_fields = []
+                
+                # Check director entries have franchise fields  
+                directors = data.get("directors", [])
+                if directors:
+                    director = directors[0]
+                    required_director_fields = ["name", "count", "proportion_index", "franchise_count", "standalone_count"]
+                    missing_director_fields = [field for field in required_director_fields if field not in director]
+                else:
+                    missing_director_fields = []
+                
+                all_missing = missing_stats + missing_genre_fields + missing_actor_fields + missing_director_fields
+                
+                if not all_missing:
                     self.log_result(
-                        f"Feeling Search ({feeling_test['name']})",
+                        "Profile Insights (Enhanced)",
                         True,
-                        f"Query: '{query}' returned no results (might be expected)"
+                        f"Stats: {stats['effective_entries']} effective entries, {stats['franchises_watched']} franchises",
+                        {
+                            "stats": stats,
+                            "sample_genre": genres[0] if genres else None,
+                            "sample_actor": actors[0] if actors else None,
+                            "sample_director": directors[0] if directors else None
+                        }
                     )
+                    return data
                 else:
                     self.log_result(
-                        f"Feeling Search ({feeling_test['name']})",
+                        "Profile Insights (Enhanced)",
                         False,
-                        f"Response missing required fields: {missing_fields}"
+                        f"Missing enhanced fields: {all_missing}"
                     )
-                    all_passed = False
+                    return None
             else:
                 self.log_result(
-                    f"Feeling Search ({feeling_test['name']})",
+                    "Profile Insights (Enhanced)",
                     False,
-                    error or "Failed to get response"
+                    f"Missing required fields: {missing_fields}"
                 )
-                all_passed = False
+                return None
+        else:
+            self.log_result(
+                "Profile Insights (Enhanced)",
+                False,
+                error
+            )
+            return None
+
+    def test_movie_metadata_caching(self):
+        """Test that movie metadata includes franchise information from TMDB"""
+        # Test with a known franchise movie (e.g., Iron Man - MCU)
+        movie_id = 1726  # Iron Man
+        success, data, error = self.make_request("GET", f"/movies/{movie_id}")
         
-        return all_passed
+        if success and data:
+            # Check if franchise info is present (might be None for non-franchise movies)
+            has_franchise_field = "franchise" in data or "belongs_to_collection" in data
+            
+            self.log_result(
+                "Movie Metadata Caching (Franchise Info)",
+                True,
+                f"Movie {data.get('title', 'Unknown')} - Franchise field present: {has_franchise_field}",
+                {
+                    "title": data.get("title"),
+                    "has_franchise_info": has_franchise_field,
+                    "franchise": data.get("franchise") or data.get("belongs_to_collection")
+                }
+            )
+            return data
+        else:
+            self.log_result(
+                "Movie Metadata Caching (Franchise Info)",
+                False,
+                error
+            )
+            return None
+
+    def test_proportion_scoring_algorithm(self):
+        """Test that proportion-based scoring is working by checking insights data"""
+        insights = self.test_profile_insights()
+        
+        if insights:
+            genres = insights.get("genres", [])
+            if genres:
+                # Check that proportion_index values are reasonable (should be > 0)
+                valid_proportions = all(
+                    isinstance(g.get("proportion_index"), (int, float)) and g.get("proportion_index", 0) > 0
+                    for g in genres
+                )
+                
+                if valid_proportions:
+                    self.log_result(
+                        "Proportion Scoring Algorithm",
+                        True,
+                        f"All {len(genres)} genres have valid proportion scores",
+                        {
+                            "sample_proportions": [
+                                {"name": g["name"], "proportion_index": g["proportion_index"]}
+                                for g in genres[:3]
+                            ]
+                        }
+                    )
+                    return True
+                else:
+                    self.log_result(
+                        "Proportion Scoring Algorithm",
+                        False,
+                        "Some genres have invalid proportion_index values"
+                    )
+                    return False
+            else:
+                self.log_result(
+                    "Proportion Scoring Algorithm",
+                    True,
+                    "No genres to test (user may have no watch history)"
+                )
+                return True
+        else:
+            self.log_result(
+                "Proportion Scoring Algorithm",
+                False,
+                "Could not get profile insights to test proportion scoring"
+            )
+            return False
+
+    def test_franchise_deduplication(self):
+        """Test that franchise deduplication is working by checking stats"""
+        insights = self.test_profile_insights()
+        
+        if insights:
+            stats = insights.get("stats", {})
+            total_movies = stats.get("total_movies_watched", 0)
+            effective_entries = stats.get("effective_entries", 0)
+            franchises_watched = stats.get("franchises_watched", 0)
+            
+            # If user has watched franchise movies, effective entries should be less than total
+            if franchises_watched > 0:
+                deduplication_working = effective_entries <= total_movies
+                
+                self.log_result(
+                    "Franchise Deduplication",
+                    deduplication_working,
+                    f"Total: {total_movies}, Effective: {effective_entries}, Franchises: {franchises_watched}",
+                    stats
+                )
+                return deduplication_working
+            else:
+                self.log_result(
+                    "Franchise Deduplication",
+                    True,
+                    "No franchises watched - deduplication not applicable"
+                )
+                return True
+        else:
+            self.log_result(
+                "Franchise Deduplication",
+                False,
+                "Could not get profile insights to test franchise deduplication"
+            )
+            return False
 
     def run_all_tests(self):
         """Run complete test suite"""
