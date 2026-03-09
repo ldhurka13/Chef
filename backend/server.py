@@ -403,6 +403,183 @@ async def get_cached_actor_stats(actor_name: str) -> dict:
         _actor_stats_cache[actor_name] = await get_actor_stats(actor_name)
     return _actor_stats_cache[actor_name]
 
+# ============ PROPORTION-BASED SCORING ============
+# Cache for total counts in database (refreshed periodically)
+_total_counts_cache = {
+    "genres": {},
+    "actors": {},
+    "directors": {},
+    "last_updated": None
+}
+
+async def get_total_counts():
+    """
+    Get total count of movies for each genre, actor, and director in the database.
+    Used to calculate proportions for fair comparisons.
+    Cached for 1 hour to avoid repeated DB queries.
+    """
+    from datetime import datetime, timedelta
+    
+    # Check if cache is fresh (less than 1 hour old)
+    if _total_counts_cache["last_updated"]:
+        age = datetime.now(timezone.utc) - _total_counts_cache["last_updated"]
+        if age < timedelta(hours=1):
+            return _total_counts_cache
+    
+    # Count movies per genre
+    genre_pipeline = [
+        {"$unwind": "$genres"},
+        {"$group": {"_id": "$genres", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    genre_counts = {}
+    async for doc in db.movies.aggregate(genre_pipeline):
+        genre_counts[doc["_id"]] = doc["count"]
+    
+    # Count movies per actor (from stars field)
+    actor_pipeline = [
+        {"$unwind": "$stars"},
+        {"$group": {"_id": "$stars", "count": {"$sum": 1}}},
+        {"$match": {"count": {"$gte": 3}}},  # Only actors with 3+ movies
+        {"$sort": {"count": -1}},
+        {"$limit": 10000}  # Limit to top 10k actors
+    ]
+    actor_counts = {}
+    async for doc in db.movies.aggregate(actor_pipeline):
+        actor_counts[doc["_id"]] = doc["count"]
+    
+    # Count movies per director
+    director_pipeline = [
+        {"$unwind": "$directors"},
+        {"$group": {"_id": "$directors", "count": {"$sum": 1}}},
+        {"$match": {"count": {"$gte": 2}}},  # Only directors with 2+ movies
+        {"$sort": {"count": -1}},
+        {"$limit": 5000}
+    ]
+    director_counts = {}
+    async for doc in db.movies.aggregate(director_pipeline):
+        director_counts[doc["_id"]] = doc["count"]
+    
+    # Update cache
+    _total_counts_cache["genres"] = genre_counts
+    _total_counts_cache["actors"] = actor_counts
+    _total_counts_cache["directors"] = director_counts
+    _total_counts_cache["last_updated"] = datetime.now(timezone.utc)
+    _total_counts_cache["total_movies"] = await db.movies.count_documents({})
+    
+    return _total_counts_cache
+
+def calculate_proportion_score(user_count: int, total_available: int, total_user_movies: int, total_db_movies: int) -> float:
+    """
+    Calculate proportion-based score for fair comparison across categories.
+    
+    user_proportion = user_count / total_user_movies (what % of user's movies are in this category)
+    available_proportion = total_available / total_db_movies (what % of all movies are in this category)
+    
+    Returns: user_proportion / available_proportion (values > 1 mean user watches more than average)
+    """
+    if total_available == 0 or total_user_movies == 0 or total_db_movies == 0:
+        return 1.0
+    
+    user_proportion = user_count / total_user_movies
+    available_proportion = total_available / total_db_movies
+    
+    # Ratio of user's preference vs what's available
+    # > 1.0 means user prefers this more than average
+    # < 1.0 means user watches less than what's available
+    ratio = user_proportion / max(available_proportion, 0.001)
+    
+    return ratio
+
+# ============ FRANCHISE HANDLING ============
+
+def group_movies_by_franchise(movies_with_metadata: list) -> dict:
+    """
+    Group movies by franchise/collection.
+    
+    Returns dict with:
+    - 'franchises': {franchise_id: [list of movie data]}
+    - 'standalone': [list of non-franchise movies]
+    """
+    franchises = {}
+    standalone = []
+    
+    for movie in movies_with_metadata:
+        franchise = movie.get("franchise") or movie.get("meta", {}).get("franchise")
+        if franchise and franchise.get("id"):
+            fid = franchise["id"]
+            fname = franchise.get("name", f"Franchise {fid}")
+            if fid not in franchises:
+                franchises[fid] = {
+                    "name": fname,
+                    "movies": []
+                }
+            franchises[fid]["movies"].append(movie)
+        else:
+            standalone.append(movie)
+    
+    return {
+        "franchises": franchises,
+        "standalone": standalone
+    }
+
+def aggregate_franchise_scores(franchise_movies: list) -> dict:
+    """
+    Aggregate scores for movies in a franchise to treat as single entity.
+    
+    Returns averaged metrics:
+    - user_avg_rating: average of user ratings across franchise
+    - preference: average preference signal
+    - watch_count: counts as 1 (not N movies)
+    - actors/directors/genres: deduplicated and averaged
+    """
+    if not franchise_movies:
+        return {}
+    
+    # Average user ratings
+    ratings = [m.get("user_avg", m.get("user_rating", 5)) for m in franchise_movies]
+    avg_rating = sum(ratings) / len(ratings)
+    
+    # Average preference signals
+    preferences = [m.get("preference", 0) for m in franchise_movies]
+    avg_preference = sum(preferences) / len(preferences)
+    
+    # Collect unique actors/directors/genres (deduplicated)
+    actors_seen = {}  # name -> best order position
+    directors_seen = set()
+    genres_seen = set()
+    
+    for m in franchise_movies:
+        meta = m.get("meta", {})
+        
+        for actor in meta.get("cast", []):
+            name = actor.get("name", "")
+            if name:
+                # Keep the best (lowest) order for this actor across franchise
+                current_order = actors_seen.get(name, {}).get("order", 999)
+                if actor.get("order", 999) < current_order:
+                    actors_seen[name] = actor
+        
+        for director in meta.get("directors", []):
+            name = director.get("name", "")
+            if name:
+                directors_seen.add(name)
+        
+        for genre in meta.get("genres", []):
+            name = genre.get("name") if isinstance(genre, dict) else genre
+            if name:
+                genres_seen.add(name)
+    
+    return {
+        "user_avg_rating": avg_rating,
+        "avg_preference": avg_preference,
+        "effective_count": 1,  # Counts as 1, not N
+        "actual_movie_count": len(franchise_movies),
+        "actors": actors_seen,
+        "directors": list(directors_seen),
+        "genres": list(genres_seen)
+    }
+
 # Genre categorization for complexity/mood
 LOW_ENERGY_GENRES = {"Documentary", "History", "War", "Drama"}
 HIGH_ENERGY_GENRES = {"Animation", "Comedy", "Adventure", "Action"}
