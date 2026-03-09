@@ -43,10 +43,14 @@ class FlickBackendTester:
             print(f"   Error: {details}")
         print()
 
-    def make_request(self, method: str, endpoint: str, data: dict = None, timeout: int = 30) -> tuple:
+    def make_request(self, method: str, endpoint: str, data: dict = None, timeout: int = 30, auth_required: bool = False) -> tuple:
         """Make HTTP request and return (success, response_data, error_msg)"""
         url = f"{API_BASE}{endpoint}"
         headers = {"Content-Type": "application/json"}
+        
+        # Add auth header if token is available and auth is required
+        if auth_required and self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
         
         try:
             if method == "GET":
