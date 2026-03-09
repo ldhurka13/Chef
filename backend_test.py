@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 # Use the public endpoint from frontend/.env
-BACKEND_URL = "https://diary-watch.preview.emergentagent.com"
+BACKEND_URL = "https://chef-movies.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 class FlickBackendTester:
