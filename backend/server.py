@@ -322,7 +322,6 @@ def calculate_actor_impact(
     
     # Experience multiplier (logarithmic scale to prevent extreme values)
     # An actor with 50+ films gets ~2x boost, 10 films ~1.5x
-    import math
     experience_multiplier = 1.0 + (math.log10(max(actor_filmography_count, 1) + 1) * 0.5)
     
     # Popularity multiplier (normalized 0-1 scale, TMDB popularity is usually 0-100+)
