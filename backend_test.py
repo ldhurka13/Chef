@@ -85,6 +85,56 @@ class FlickBackendTester:
         except Exception as e:
             return False, None, f"Request failed: {str(e)}"
 
+    def test_authentication(self):
+        """Test user registration and login to get auth token"""
+        # Try to register a test user
+        test_email = f"test_user_{int(time.time())}@example.com"
+        test_password = "testpass123"
+        test_username = f"test_user_{int(time.time())}"
+        
+        register_data = {
+            "email": test_email,
+            "password": test_password,
+            "username": test_username,
+            "birth_year": 1990
+        }
+        
+        success, data, error = self.make_request("POST", "/auth/register", register_data)
+        
+        if success and data and "token" in data:
+            self.auth_token = data["token"]
+            self.log_result(
+                "User Registration",
+                True,
+                f"Registered user: {test_username}",
+                {"username": test_username, "has_token": bool(self.auth_token)}
+            )
+            return True
+        else:
+            # Try to login with existing user if registration failed
+            login_data = {
+                "email": "test@example.com",
+                "password": "password123"
+            }
+            
+            success, data, error = self.make_request("POST", "/auth/login", login_data)
+            
+            if success and data and "token" in data:
+                self.auth_token = data["token"]
+                self.log_result(
+                    "User Login (Fallback)",
+                    True,
+                    "Logged in with existing test user"
+                )
+                return True
+            else:
+                self.log_result(
+                    "Authentication",
+                    False,
+                    f"Both registration and login failed. Register error: {error}"
+                )
+                return False
+
     def test_root_endpoint(self):
         """Test basic API connectivity"""
         success, data, error = self.make_request("GET", "/")
