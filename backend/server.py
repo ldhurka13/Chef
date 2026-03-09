@@ -2264,23 +2264,11 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
             }
             for name, data in ranked[:limit]
         ]
-        ranked = sorted(scores_dict.items(), key=lambda x: x[1]["total_weight"], reverse=True)
-        return [
-            {
-                "name": name,
-                "score": round(data["total_weight"], 1),
-                "count": data["count"],
-                "avg_preference": round(data["total_pref"] / data["count"], 1) if data["count"] else 0,
-                "avg_expected": round(data["total_expected"] / data["count"], 1) if data["count"] else 0,
-                "profile_path": data.get("profile_path"),
-            }
-            for name, data in ranked[:limit]
-        ]
     
     result = {
-        "genres": rank(genre_scores),
-        "actors": rank(actor_scores),
-        "directors": rank(director_scores),
+        "genres": rank_genres(genre_scores),
+        "actors": rank_actors(actor_scores),
+        "directors": rank_directors(director_scores),
     }
     
     # Cache the result
