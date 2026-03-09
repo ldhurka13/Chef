@@ -2548,7 +2548,7 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     
     # ============ RANKING WITH PROPORTION SCORES ============
     
-    def rank_genres_with_proportion(scores_dict, limit=10):  # Increased to 10 to include more genres
+    def rank_genres_with_proportion(scores_dict, limit=5):
         genre_totals = total_counts.get("genres", {})
         
         scored = []
