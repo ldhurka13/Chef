@@ -640,12 +640,13 @@ class FlickBackendTester:
             )
             return None
 
-    def test_proportion_scoring_algorithm(self):
+    def test_proportion_scoring_algorithm(self, insights_data=None):
         """Test that proportion-based scoring is working by checking insights data"""
-        insights = self.test_profile_insights()
+        if not insights_data:
+            insights_data = self.test_profile_insights()
         
-        if insights:
-            genres = insights.get("genres", [])
+        if insights_data:
+            genres = insights_data.get("genres", [])
             if genres:
                 # Check that proportion_index values are reasonable (should be > 0)
                 valid_proportions = all(
@@ -688,12 +689,13 @@ class FlickBackendTester:
             )
             return False
 
-    def test_franchise_deduplication(self):
+    def test_franchise_deduplication(self, insights_data=None):
         """Test that franchise deduplication is working by checking stats"""
-        insights = self.test_profile_insights()
+        if not insights_data:
+            insights_data = self.test_profile_insights()
         
-        if insights:
-            stats = insights.get("stats", {})
+        if insights_data:
+            stats = insights_data.get("stats", {})
             total_movies = stats.get("total_movies_watched", 0)
             effective_entries = stats.get("effective_entries", 0)
             franchises_watched = stats.get("franchises_watched", 0)
