@@ -476,7 +476,7 @@ class FlickBackendTester:
             "poster_path": "/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg"
         }
         
-        success, data, error = self.make_request("POST", "/user/watch-history", watch_data)
+        success, data, error = self.make_request("POST", "/user/watch-history", watch_data, auth_required=True)
         
         if success and data:
             required_fields = ["user_id", "tmdb_id", "user_rating", "title"]
