@@ -182,7 +182,7 @@ class FlickBackendTester:
 
     def test_user_profile(self):
         """Test getting user profile"""
-        success, data, error = self.make_request("GET", "/user/profile")
+        success, data, error = self.make_request("GET", "/auth/me", auth_required=True)
         
         if success and data:
             required_fields = ["id", "username", "birth_year"]
