@@ -1102,8 +1102,8 @@ def compute_familiarity_boost(movie_metadata: dict, familiarity_data: dict) -> f
     # Updated weights: director 35%, actors 35% (increased due to impact weighting), genre 30%
     total_familiarity = (
         director_familiarity * 0.35 +
-        genre_familiarity * 0.35 +
-        actor_familiarity * 0.25
+        genre_familiarity * 0.30 +
+        actor_familiarity * 0.35
     )
     
     return min(1.0, total_familiarity)
