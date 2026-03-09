@@ -404,6 +404,29 @@ async def get_cached_actor_stats(actor_name: str) -> dict:
     return _actor_stats_cache[actor_name]
 
 # ============ PROPORTION-BASED SCORING ============
+# Genre name normalization (TMDB name -> Local DB name variants)
+GENRE_NAME_ALIASES = {
+    "Science Fiction": ["Sci-Fi", "Science Fiction", "Space Sci-Fi", "Dystopian Sci-Fi", "Sci-Fi Epic"],
+    "Sci-Fi": ["Sci-Fi", "Science Fiction", "Space Sci-Fi", "Dystopian Sci-Fi", "Sci-Fi Epic"],
+    "Action": ["Action", "Action Thriller", "Action Adventure"],
+    "Adventure": ["Adventure", "Action Adventure"],
+    "Animation": ["Animation", "Anime"],
+    "Documentary": ["Documentary", "Science & Technology Documentary", "Nature Documentary", "Historical Documentary"],
+    "Fantasy": ["Fantasy", "Dark Fantasy", "Epic Fantasy"],
+    "Horror": ["Horror", "Psychological Horror", "Supernatural Horror"],
+    "Music": ["Music", "Musical"],
+    "Musical": ["Musical", "Music"],
+    "Mystery": ["Mystery", "Crime Mystery"],
+    "Romance": ["Romance", "Romantic Comedy", "Romantic Drama"],
+    "Thriller": ["Thriller", "Psychological Thriller", "Action Thriller"],
+    "War": ["War", "War Drama"],
+    "Western": ["Western"],
+}
+
+def normalize_genre_for_lookup(genre_name: str) -> list:
+    """Get all possible genre name variants for database lookup."""
+    return GENRE_NAME_ALIASES.get(genre_name, [genre_name])
+
 # Cache for total counts in database (refreshed periodically)
 _total_counts_cache = {
     "genres": {},
@@ -426,15 +449,30 @@ async def get_total_counts():
         if age < timedelta(hours=1):
             return _total_counts_cache
     
-    # Count movies per genre
+    # Count movies per genre (aggregate all variants)
     genre_pipeline = [
         {"$unwind": "$genres"},
         {"$group": {"_id": "$genres", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}}
     ]
-    genre_counts = {}
+    raw_genre_counts = {}
     async for doc in db.movies.aggregate(genre_pipeline):
-        genre_counts[doc["_id"]] = doc["count"]
+        raw_genre_counts[doc["_id"]] = doc["count"]
+    
+    # Normalize genre counts - combine aliases
+    genre_counts = {}
+    for tmdb_genre, aliases in GENRE_NAME_ALIASES.items():
+        total = sum(raw_genre_counts.get(alias, 0) for alias in aliases)
+        if total > 0:
+            genre_counts[tmdb_genre] = total
+    
+    # Also keep any genres not in aliases as-is
+    for genre, count in raw_genre_counts.items():
+        if genre not in genre_counts:
+            # Check if it's an alias of something else
+            is_alias = any(genre in aliases for aliases in GENRE_NAME_ALIASES.values())
+            if not is_alias:
+                genre_counts[genre] = count
     
     # Count movies per actor (from stars field)
     actor_pipeline = [
