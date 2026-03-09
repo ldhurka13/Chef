@@ -2309,19 +2309,92 @@ async def get_profile_insights(current_user: dict = Depends(get_current_user)):
     BAYESIAN_M = 1000
     
     def bayesian_expected(imdb_rating, imdb_votes):
-        """Shrink IMDB rating toward global mean for movies with few votes."""
         if not imdb_rating or not imdb_votes:
             return GLOBAL_MEAN
         v = max(imdb_votes, 1)
         return (v * imdb_rating + BAYESIAN_M * GLOBAL_MEAN) / (v + BAYESIAN_M)
     
-    # Score computation — preference signal: user_rating - bayesian_expected
+    # ============ FRANCHISE GROUPING ============
+    # Combine history with metadata for franchise detection
+    movies_with_meta = []
+    for h in history:
+        meta = metadata.get(h["tmdb_id"], {})
+        watches = h.get("watches", [])
+        user_avg = (sum(w.get("rating", 0) for w in watches) / len(watches)) if watches else h.get("user_rating", 5.0)
+        
+        local = local_movies.get(h["tmdb_id"])
+        expected = bayesian_expected(
+            local.get("imdb_rating") if local else None,
+            local.get("imdb_votes") if local else None
+        )
+        preference = user_avg - expected
+        
+        movies_with_meta.append({
+            "tmdb_id": h["tmdb_id"],
+            "user_avg": user_avg,
+            "preference": preference,
+            "expected": expected,
+            "watch_count": h.get("watch_count", 1) or 1,
+            "meta": meta,
+            "franchise": meta.get("franchise")
+        })
+    
+    # Group by franchise
+    grouped = group_movies_by_franchise(movies_with_meta)
+    
+    # Process franchises as single entities
+    processed_entries = []
+    franchise_actors = {}  # Track which actors came from franchises
+    
+    for fid, franchise_data in grouped["franchises"].items():
+        aggregated = aggregate_franchise_scores(franchise_data["movies"])
+        processed_entries.append({
+            "type": "franchise",
+            "name": franchise_data["name"],
+            "franchise_id": fid,
+            "user_avg": aggregated["user_avg_rating"],
+            "preference": aggregated["avg_preference"],
+            "expected": GLOBAL_MEAN,
+            "effective_count": 1,  # Counts as 1
+            "actual_movies": aggregated["actual_movie_count"],
+            "actors": aggregated["actors"],
+            "directors": aggregated["directors"],
+            "genres": aggregated["genres"],
+            "watch_count": 1
+        })
+        # Mark actors from this franchise
+        for actor_name in aggregated["actors"].keys():
+            if actor_name not in franchise_actors:
+                franchise_actors[actor_name] = set()
+            franchise_actors[actor_name].add(fid)
+    
+    # Add standalone movies
+    for movie in grouped["standalone"]:
+        meta = movie["meta"]
+        processed_entries.append({
+            "type": "standalone",
+            "tmdb_id": movie["tmdb_id"],
+            "user_avg": movie["user_avg"],
+            "preference": movie["preference"],
+            "expected": movie["expected"],
+            "effective_count": 1,
+            "actual_movies": 1,
+            "actors": {a.get("name"): a for a in meta.get("cast", []) if a.get("name")},
+            "directors": [d.get("name") for d in meta.get("directors", []) if d.get("name")],
+            "genres": [g.get("name") if isinstance(g, dict) else g for g in meta.get("genres", [])],
+            "watch_count": movie["watch_count"],
+            "cast_counts": meta.get("cast_counts", {}),
+            "total_cast": meta.get("total_cast", 15)
+        })
+    
+    # ============ SCORE COMPUTATION WITH PROPORTION ============
     genre_scores = {}
     actor_scores = {}
     director_scores = {}
-    
-    # Track actor filmography for experience calculation
     actor_filmography = {}
+    
+    # Effective total (accounting for franchises as 1)
+    effective_total = len(processed_entries)
     
     for h in history:
         watches = h.get("watches", [])
