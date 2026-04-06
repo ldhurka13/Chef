@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-motion";
-import { X, SkipForward, Sparkles, Trophy, RotateCcw, ChevronUp } from "lucide-react";
+import { X, SkipForward, Sparkles, Trophy, RotateCcw, ChevronUp, HelpCircle, Crown } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -10,8 +10,8 @@ const TMDB_IMG = "https://image.tmdb.org/t/p/";
 const getToken = () => localStorage.getItem("chef_token");
 const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
 
-// Swipeable Movie Card Component
-const SwipeableCard = ({ movie, onSelect, onSuperLike, side, isActive }) => {
+// Swipeable Movie Card Component with King indicator
+const SwipeableCard = ({ movie, onSelect, onSuperLike, side, isKing, isActive, roundStartTime }) => {
   const cardRef = useRef(null);
   const y = useMotionValue(0);
   const opacity = useTransform(y, [-100, 0], [0.5, 1]);
@@ -25,9 +25,17 @@ const SwipeableCard = ({ movie, onSelect, onSuperLike, side, isActive }) => {
     // Swipe up threshold for super-like
     if (info.offset.y < -80) {
       setShowSuperLike(true);
+      const reactionTime = Date.now() - roundStartTime;
       setTimeout(() => {
-        onSuperLike(movie);
+        onSuperLike(movie, reactionTime);
       }, 300);
+    }
+  };
+
+  const handleClick = () => {
+    if (!isDragging && isActive) {
+      const reactionTime = Date.now() - roundStartTime;
+      onSelect(movie, reactionTime);
     }
   };
 
@@ -38,23 +46,37 @@ const SwipeableCard = ({ movie, onSelect, onSuperLike, side, isActive }) => {
       ref={cardRef}
       className={`relative flex-1 max-w-[45%] aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer
                   border-2 transition-colors duration-300
-                  ${isActive ? 'border-chef-teal/50' : 'border-white/10'}
+                  ${isKing ? 'border-amber-400/50 ring-2 ring-amber-400/20' : 'border-white/10'}
+                  ${isActive ? 'hover:border-chef-teal/50' : 'opacity-70'}
                   ${showSuperLike ? 'border-amber-400' : ''}`}
       style={{ y, opacity, scale }}
-      drag="y"
+      drag={isActive ? "y" : false}
       dragConstraints={{ top: -100, bottom: 0 }}
       dragElastic={0.1}
       onDragStart={() => setIsDragging(true)}
       onDragEnd={handleDragEnd}
-      onClick={() => !isDragging && onSelect(movie)}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      onClick={handleClick}
+      whileHover={isActive ? { scale: 1.02 } : {}}
+      whileTap={isActive ? { scale: 0.98 } : {}}
       initial={{ opacity: 0, x: side === "left" ? -50 : 50 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, scale: 0.8 }}
       transition={{ duration: 0.4 }}
       data-testid={`game-card-${side}`}
     >
+      {/* King Crown Badge */}
+      {isKing && (
+        <motion.div
+          initial={{ scale: 0, y: -20 }}
+          animate={{ scale: 1, y: 0 }}
+          className="absolute top-3 left-3 z-20 flex items-center gap-1 px-2 py-1 
+                     bg-amber-500/20 border border-amber-400/30 rounded-full"
+        >
+          <Crown className="w-4 h-4 text-amber-400" />
+          <span className="text-xs text-amber-400 font-medium">King</span>
+        </motion.div>
+      )}
+
       {/* Movie Poster */}
       {movie.poster_path ? (
         <img
@@ -90,14 +112,16 @@ const SwipeableCard = ({ movie, onSelect, onSuperLike, side, isActive }) => {
       </AnimatePresence>
 
       {/* Swipe Up Hint */}
-      <motion.div
-        className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-50"
-        animate={{ y: [0, -5, 0] }}
-        transition={{ repeat: Infinity, duration: 1.5 }}
-      >
-        <ChevronUp className="w-5 h-5 text-amber-400" />
-        <span className="text-[10px] text-amber-400 uppercase tracking-wider">Super Like</span>
-      </motion.div>
+      {isActive && !isKing && (
+        <motion.div
+          className="absolute top-3 right-3 flex flex-col items-center gap-1 opacity-50"
+          animate={{ y: [0, -5, 0] }}
+          transition={{ repeat: Infinity, duration: 1.5 }}
+        >
+          <ChevronUp className="w-5 h-5 text-amber-400" />
+          <span className="text-[10px] text-amber-400 uppercase tracking-wider">Super</span>
+        </motion.div>
+      )}
 
       {/* Movie Info */}
       <div className="absolute bottom-0 left-0 right-0 p-4">
@@ -125,9 +149,11 @@ const SwipeableCard = ({ movie, onSelect, onSuperLike, side, isActive }) => {
       </div>
 
       {/* Tap Indicator */}
-      <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
-        <span className="text-[10px] text-white/50 uppercase tracking-wider">Tap to select</span>
-      </div>
+      {isActive && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
+          <span className="text-[10px] text-white/50 uppercase tracking-wider">Tap to select</span>
+        </div>
+      )}
     </motion.div>
   );
 };
@@ -168,16 +194,30 @@ const ResultCard = ({ movie, rank }) => {
           <span className="text-chef-teal font-medium">{movie.confidence}% Match</span>
           <span className="text-chef-muted text-sm">{movie.vote_average?.toFixed(1)} TMDB</span>
         </div>
-        {movie.genres && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {movie.genres.slice(0, 3).map((g, i) => (
-              <span key={i} className="text-xs text-chef-muted/70 bg-white/5 px-2 py-0.5 rounded">
-                {g}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
+    </motion.div>
+  );
+};
+
+// Reaction Time Indicator
+const ReactionIndicator = ({ reactionTime }) => {
+  if (!reactionTime) return null;
+  
+  const seconds = (reactionTime / 1000).toFixed(1);
+  const isFast = reactionTime < 2000;
+  const isSlow = reactionTime > 5000;
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`text-xs px-2 py-1 rounded-full ${
+        isFast ? 'bg-emerald-500/20 text-emerald-400' :
+        isSlow ? 'bg-red-500/20 text-red-400' :
+        'bg-white/10 text-chef-muted'
+      }`}
+    >
+      {seconds}s {isFast ? '⚡ Fast!' : isSlow ? '🤔 Hesitant' : ''}
     </motion.div>
   );
 };
@@ -190,7 +230,10 @@ const MovieGame = ({ open, onOpenChange }) => {
   const [movies, setMovies] = useState([null, null]);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
-  const [currentTop, setCurrentTop] = useState([]);
+  const [currentScores, setCurrentScores] = useState([]);
+  const [kingPosition, setKingPosition] = useState(null);
+  const [roundStartTime, setRoundStartTime] = useState(null);
+  const [lastReactionTime, setLastReactionTime] = useState(null);
 
   const startGame = async () => {
     setLoading(true);
@@ -199,8 +242,11 @@ const MovieGame = ({ open, onOpenChange }) => {
       setSessionId(res.data.session_id);
       setRound(res.data.round);
       setMovies(res.data.movies);
+      setKingPosition(res.data.king_position);
       setGameState("playing");
-      setCurrentTop([]);
+      setCurrentScores([]);
+      setRoundStartTime(Date.now());
+      setLastReactionTime(null);
     } catch (error) {
       console.error("Failed to start game:", error);
       toast.error("Failed to start game. Please try again.");
@@ -209,20 +255,24 @@ const MovieGame = ({ open, onOpenChange }) => {
     }
   };
 
-  const handleSelect = async (chosenMovie, isSuperLike = false) => {
+  const handleSelect = async (chosenMovie, reactionTime, isSuperLike = false) => {
     if (loading || !movies[0] || !movies[1]) return;
 
     const rejectedMovie = movies.find(m => m?.id !== chosenMovie.id);
     if (!rejectedMovie) return;
 
     setLoading(true);
+    setLastReactionTime(reactionTime);
+
     try {
       const res = await axios.post(`${API}/game/choose`, {
         session_id: sessionId,
         round_number: round,
         chosen_movie_id: chosenMovie.id,
         rejected_movie_id: rejectedMovie.id,
-        is_super_like: isSuperLike
+        reaction_time_ms: reactionTime,
+        is_super_like: isSuperLike,
+        is_cant_decide: false
       }, { headers: authHeaders() });
 
       if (res.data.game_over) {
@@ -232,7 +282,9 @@ const MovieGame = ({ open, onOpenChange }) => {
       } else {
         setRound(res.data.round);
         setMovies(res.data.movies);
-        setCurrentTop(res.data.current_top || []);
+        setKingPosition(res.data.king_position);
+        setCurrentScores(res.data.current_scores || []);
+        setRoundStartTime(Date.now());
       }
     } catch (error) {
       console.error("Failed to submit choice:", error);
@@ -259,10 +311,46 @@ const MovieGame = ({ open, onOpenChange }) => {
       } else {
         setRound(res.data.round);
         setMovies(res.data.movies);
+        setKingPosition(res.data.king_position);
+        setCurrentScores(res.data.current_scores || []);
+        setRoundStartTime(Date.now());
+        setLastReactionTime(null);
       }
     } catch (error) {
       console.error("Failed to skip:", error);
       toast.error("Failed to skip. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCantDecide = async () => {
+    if (loading || !movies[0] || !movies[1]) return;
+
+    const reactionTime = Date.now() - roundStartTime;
+    setLoading(true);
+    setLastReactionTime(reactionTime);
+
+    try {
+      const res = await axios.post(
+        `${API}/game/cant-decide?session_id=${sessionId}&round_number=${round}&movie1_id=${movies[0].id}&movie2_id=${movies[1].id}&reaction_time_ms=${reactionTime}`,
+        {},
+        { headers: authHeaders() }
+      );
+
+      if (res.data.game_over) {
+        setResults(res.data.recommendations);
+        setGameState("results");
+      } else {
+        setRound(res.data.round);
+        setMovies(res.data.movies);
+        setKingPosition(res.data.king_position);
+        setCurrentScores(res.data.current_scores || []);
+        setRoundStartTime(Date.now());
+      }
+    } catch (error) {
+      console.error("Failed to submit can't decide:", error);
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -274,7 +362,10 @@ const MovieGame = ({ open, onOpenChange }) => {
     setRound(1);
     setMovies([null, null]);
     setResults([]);
-    setCurrentTop([]);
+    setCurrentScores([]);
+    setKingPosition(null);
+    setRoundStartTime(null);
+    setLastReactionTime(null);
   };
 
   const handleClose = () => {
@@ -317,24 +408,25 @@ const MovieGame = ({ open, onOpenChange }) => {
         <div className="sticky top-0 z-10 flex items-center justify-between p-4 
                         bg-chef-bg/80 backdrop-blur-xl border-b border-white/10">
           <div className="flex items-center gap-3">
-            <Sparkles className="w-6 h-6 text-chef-teal" />
-            <h2 className="font-serif text-xl text-chef-platinum">Movie Game</h2>
+            <Crown className="w-6 h-6 text-amber-400" />
+            <h2 className="font-serif text-xl text-chef-platinum">King of the Hill</h2>
           </div>
           
           {gameState === "playing" && (
             <div className="flex items-center gap-4">
               <span className="text-sm text-chef-muted">
-                Round <span className="text-chef-platinum font-medium">{round}</span> / 20
+                Round <span className="text-chef-platinum font-medium">{round}</span> / 10
               </span>
               {/* Progress bar */}
               <div className="w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
                 <motion.div
-                  className="h-full bg-chef-teal"
+                  className="h-full bg-amber-400"
                   initial={{ width: 0 }}
-                  animate={{ width: `${(round / 20) * 100}%` }}
+                  animate={{ width: `${(round / 10) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
               </div>
+              {lastReactionTime && <ReactionIndicator reactionTime={lastReactionTime} />}
             </div>
           )}
           
@@ -356,40 +448,44 @@ const MovieGame = ({ open, onOpenChange }) => {
               animate={{ opacity: 1 }}
               className="flex flex-col items-center justify-center py-12 text-center"
             >
-              <div className="w-20 h-20 rounded-full bg-chef-teal/10 border border-chef-teal/30
+              <div className="w-20 h-20 rounded-full bg-amber-500/10 border border-amber-400/30
                             flex items-center justify-center mb-6">
-                <Sparkles className="w-10 h-10 text-chef-teal" />
+                <Crown className="w-10 h-10 text-amber-400" />
               </div>
               
               <h3 className="font-serif text-2xl text-chef-platinum mb-3">
-                Discover Your Perfect Movie
+                King of the Hill
               </h3>
               <p className="text-chef-muted max-w-md mb-8">
-                Choose between two movies in each round. We'll learn your preferences 
-                and recommend the perfect films for you. Swipe up for a super-like!
+                Choose between two movies - the winner stays to face a new challenger! 
+                Fast choices show strong preferences. Swipe up for super-like!
               </p>
               
               <div className="flex flex-col gap-3 text-sm text-chef-muted/80 mb-8">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-chef-teal" />
-                  <span>Tap a movie to select it (+1 point)</span>
+                  <span>Tap a movie to select it - faster = higher score</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-amber-400" />
-                  <span>Swipe up for super-like (3x points)</span>
+                  <span>Swipe up for super-like (2x multiplier)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-400" />
+                  <span>Can't Decide = equal points to both</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-white/30" />
-                  <span>Skip if you can't decide</span>
+                  <span>Skip = 0 points, fresh matchup</span>
                 </div>
               </div>
               
               <motion.button
                 onClick={startGame}
                 disabled={loading}
-                className="px-8 py-3 bg-chef-teal/20 border border-chef-teal/30 
-                         text-chef-teal rounded-full font-medium
-                         hover:bg-chef-teal/30 transition-all
+                className="px-8 py-3 bg-amber-500/20 border border-amber-400/30 
+                         text-amber-400 rounded-full font-medium
+                         hover:bg-amber-500/30 transition-all
                          disabled:opacity-50 disabled:cursor-not-allowed"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -403,20 +499,20 @@ const MovieGame = ({ open, onOpenChange }) => {
           {/* Playing State */}
           {gameState === "playing" && (
             <div className="flex flex-col items-center">
-              {/* Current Top Picks Preview */}
-              {currentTop.length > 0 && (
+              {/* Current Scores Preview */}
+              {currentScores.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="mb-6 text-center"
                 >
                   <p className="text-xs text-chef-muted/60 uppercase tracking-wider mb-2">
-                    Current Top Picks
+                    Current Leaders
                   </p>
-                  <div className="flex gap-3 justify-center">
-                    {currentTop.slice(0, 3).map((m, i) => (
-                      <span key={i} className="text-xs text-chef-muted">
-                        {m.title} ({m.confidence}%)
+                  <div className="flex gap-4 justify-center">
+                    {currentScores.slice(0, 3).map((m, i) => (
+                      <span key={i} className="text-xs text-chef-muted bg-white/5 px-2 py-1 rounded">
+                        {i + 1}. {m.title?.substring(0, 15)}... ({m.score})
                       </span>
                     ))}
                   </div>
@@ -427,46 +523,67 @@ const MovieGame = ({ open, onOpenChange }) => {
               <div className="flex items-center justify-center gap-6 w-full mb-8">
                 <AnimatePresence mode="wait">
                   <SwipeableCard
-                    key={`left-${round}`}
+                    key={`left-${round}-${movies[0]?.id}`}
                     movie={movies[0]}
-                    onSelect={(m) => handleSelect(m, false)}
-                    onSuperLike={(m) => handleSelect(m, true)}
+                    onSelect={(m, rt) => handleSelect(m, rt, false)}
+                    onSuperLike={(m, rt) => handleSelect(m, rt, true)}
                     side="left"
+                    isKing={kingPosition === "left"}
                     isActive={!loading}
+                    roundStartTime={roundStartTime}
                   />
                   
                   <div className="text-chef-muted/50 font-serif text-2xl">vs</div>
                   
                   <SwipeableCard
-                    key={`right-${round}`}
+                    key={`right-${round}-${movies[1]?.id}`}
                     movie={movies[1]}
-                    onSelect={(m) => handleSelect(m, false)}
-                    onSuperLike={(m) => handleSelect(m, true)}
+                    onSelect={(m, rt) => handleSelect(m, rt, false)}
+                    onSuperLike={(m, rt) => handleSelect(m, rt, true)}
                     side="right"
+                    isKing={kingPosition === "right"}
                     isActive={!loading}
+                    roundStartTime={roundStartTime}
                   />
                 </AnimatePresence>
               </div>
 
-              {/* Skip Button */}
-              <motion.button
-                onClick={handleSkip}
-                disabled={loading}
-                className="flex items-center gap-2 px-6 py-2.5 
-                         bg-white/5 border border-white/10 rounded-full
-                         text-chef-muted hover:text-chef-platinum hover:bg-white/10
-                         transition-all disabled:opacity-50"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                data-testid="skip-btn"
-              >
-                <SkipForward className="w-4 h-4" />
-                <span className="text-sm">Skip</span>
-              </motion.button>
+              {/* Control Buttons */}
+              <div className="flex items-center gap-4">
+                <motion.button
+                  onClick={handleSkip}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-5 py-2.5 
+                           bg-white/5 border border-white/10 rounded-full
+                           text-chef-muted hover:text-chef-platinum hover:bg-white/10
+                           transition-all disabled:opacity-50"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  data-testid="skip-btn"
+                >
+                  <SkipForward className="w-4 h-4" />
+                  <span className="text-sm">Skip</span>
+                </motion.button>
+
+                <motion.button
+                  onClick={handleCantDecide}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-5 py-2.5 
+                           bg-purple-500/10 border border-purple-400/20 rounded-full
+                           text-purple-400 hover:bg-purple-500/20
+                           transition-all disabled:opacity-50"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  data-testid="cant-decide-btn"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                  <span className="text-sm">Can't Decide</span>
+                </motion.button>
+              </div>
 
               {loading && (
                 <div className="mt-4 text-chef-muted text-sm animate-pulse">
-                  Loading next round...
+                  Loading next challenger...
                 </div>
               )}
             </div>
@@ -488,7 +605,7 @@ const MovieGame = ({ open, onOpenChange }) => {
                 Your Perfect Movies
               </h3>
               <p className="text-chef-muted mb-8">
-                Based on your choices, here are our top recommendations
+                Based on your choices and reaction times
               </p>
 
               <div className="w-full max-w-xl space-y-4 mb-8">
@@ -500,8 +617,8 @@ const MovieGame = ({ open, onOpenChange }) => {
               <motion.button
                 onClick={resetGame}
                 className="flex items-center gap-2 px-6 py-3 
-                         bg-chef-teal/20 border border-chef-teal/30 rounded-full
-                         text-chef-teal hover:bg-chef-teal/30 transition-all"
+                         bg-amber-500/20 border border-amber-400/30 rounded-full
+                         text-amber-400 hover:bg-amber-500/30 transition-all"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 data-testid="play-again-btn"

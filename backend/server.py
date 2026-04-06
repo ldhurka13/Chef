@@ -2624,7 +2624,7 @@ def _get_explore_match_reason(source: str, genre_match: float, director_match: f
     return "New discovery for you"
 
 
-# ============ MOVIE GAME (This or That) ============
+# ============ MOVIE GAME (King of the Hill - Winner Stays) ============
 
 # Genre groupings for dissimilarity
 GENRE_VIBES = {
@@ -2635,55 +2635,57 @@ GENRE_VIBES = {
     "documentary": [99, 10402]  # Documentary, Music
 }
 
-def get_opposite_vibe(genre_ids: list) -> str:
-    """Determine a movie's vibe and return its opposite"""
+def get_movie_vibe(genre_ids: list) -> str:
+    """Determine a movie's vibe category"""
     vibe_scores = {vibe: 0 for vibe in GENRE_VIBES}
     for gid in genre_ids:
         for vibe, genres in GENRE_VIBES.items():
             if gid in genres:
                 vibe_scores[vibe] += 1
-    
-    # Find dominant vibe
-    dominant = max(vibe_scores, key=vibe_scores.get) if any(vibe_scores.values()) else "drama"
-    
-    # Return opposite
-    opposites = {
-        "light": "dark",
-        "dark": "light",
-        "action": "drama",
-        "drama": "action",
-        "documentary": "light"
-    }
-    return opposites.get(dominant, "light")
+    return max(vibe_scores, key=vibe_scores.get) if any(vibe_scores.values()) else "mixed"
 
 
-class MovieGameChoice(BaseModel):
+class GameChoiceV2(BaseModel):
     session_id: str
     round_number: int
     chosen_movie_id: int
     rejected_movie_id: int
+    reaction_time_ms: int  # Milliseconds taken to make choice
     is_super_like: bool = False
+    is_cant_decide: bool = False  # Both movies get equal points
 
 
-class MovieGameState(BaseModel):
-    session_id: str
-    round_number: int
-    genre_preferences: dict = {}
-    director_preferences: dict = {}
-    keyword_preferences: dict = {}
-    movies_seen: list = []
-    choices_made: list = []
-
-
-# In-memory game state storage (in production, use Redis or DB)
+# In-memory game state storage
 game_sessions = {}
+
+
+def calculate_reaction_multiplier(reaction_time_ms: int) -> float:
+    """
+    Calculate preference multiplier based on reaction time.
+    Fast choice (<2s) = high multiplier (up to 3x)
+    Slow choice (>5s) = low multiplier (down to 0.5x)
+    """
+    seconds = reaction_time_ms / 1000.0
+    
+    if seconds < 1.0:
+        return 3.0  # Very fast - strong preference
+    elif seconds < 2.0:
+        return 2.5  # Fast
+    elif seconds < 3.0:
+        return 2.0  # Medium-fast
+    elif seconds < 4.0:
+        return 1.5  # Medium
+    elif seconds < 5.0:
+        return 1.0  # Slow - normal preference
+    else:
+        return 0.5  # Very slow - hesitant/weak preference
 
 
 @api_router.post("/game/start")
 async def start_movie_game(current_user: dict = Depends(get_current_user)):
     """
-    Start a new Movie Game session.
-    Returns initial two polar-opposite movies.
+    Start a new Movie Game session with King of the Hill mechanics.
+    Uses movies from user's Diary and Watchlist as primary source.
     """
     import uuid
     global GENRE_MAP
@@ -2691,35 +2693,80 @@ async def start_movie_game(current_user: dict = Depends(get_current_user)):
         GENRE_MAP = get_genres()
     
     session_id = str(uuid.uuid4())
+    user_id = current_user["id"] if current_user else None
+    
+    # Build movie pool from user's Diary and Watchlist
+    movie_pool = []
+    movie_pool_ids = set()
+    
+    if user_id:
+        # Get movies from Diary (watch history)
+        watch_history = await db.watch_history.find(
+            {"user_id": user_id},
+            {"_id": 0, "tmdb_id": 1, "title": 1, "poster_path": 1, "user_rating": 1}
+        ).to_list(100)
+        
+        for h in watch_history:
+            if h["tmdb_id"] not in movie_pool_ids:
+                movie_pool.append({
+                    "id": h["tmdb_id"],
+                    "title": h.get("title", ""),
+                    "poster_path": h.get("poster_path"),
+                    "source": "diary",
+                    "user_rating": h.get("user_rating", 7.0)
+                })
+                movie_pool_ids.add(h["tmdb_id"])
+        
+        # Get movies from Watchlist
+        watchlist = await db.watchlist.find(
+            {"user_id": user_id},
+            {"_id": 0, "tmdb_id": 1, "title": 1, "poster_path": 1}
+        ).to_list(100)
+        
+        for w in watchlist:
+            if w["tmdb_id"] not in movie_pool_ids:
+                movie_pool.append({
+                    "id": w["tmdb_id"],
+                    "title": w.get("title", ""),
+                    "poster_path": w.get("poster_path"),
+                    "source": "watchlist",
+                    "user_rating": None
+                })
+                movie_pool_ids.add(w["tmdb_id"])
     
     # Initialize game state
     game_sessions[session_id] = {
-        "user_id": current_user["id"] if current_user else None,
+        "user_id": user_id,
         "round": 1,
+        "max_rounds": 10,
+        "movie_pool": movie_pool,
+        "movie_pool_ids": movie_pool_ids,
+        "movies_used": set(),
+        "similar_movies_fetched": False,
+        "current_king": None,  # The "winner" that stays
+        "movie_scores": {},  # {movie_id: {"score": float, "title": str, ...}}
         "genre_preferences": {},
         "director_preferences": {},
-        "keyword_preferences": {},
-        "movies_seen": set(),
-        "choices": [],
-        "confidence_scores": {}
+        "choices": []
     }
     
-    # Get first pair of polar opposite movies
-    movies = await get_polar_opposite_movies(session_id)
+    # Get first pair of dissimilar movies
+    movies = await get_game_movie_pair(session_id, is_first_round=True)
     
     return {
         "session_id": session_id,
         "round": 1,
-        "max_rounds": 20,
-        "movies": movies
+        "max_rounds": 10,
+        "movies": movies,
+        "king_position": None  # No king yet in round 1
     }
 
 
 @api_router.post("/game/choose")
-async def submit_game_choice(choice: MovieGameChoice, current_user: dict = Depends(get_current_user)):
+async def submit_game_choice(choice: GameChoiceV2, current_user: dict = Depends(get_current_user)):
     """
-    Submit a choice in the Movie Game.
-    Updates preference scores and returns next pair or results.
+    Submit a choice with reaction time scoring.
+    Winner stays (King of the Hill), loser gets replaced.
     """
     global GENRE_MAP
     if not GENRE_MAP:
@@ -2729,234 +2776,433 @@ async def submit_game_choice(choice: MovieGameChoice, current_user: dict = Depen
     if not session:
         raise HTTPException(status_code=404, detail="Game session not found")
     
-    # Get chosen movie details for scoring
-    chosen_movie = tmdb_request(f"/movie/{choice.chosen_movie_id}", {"append_to_response": "keywords,credits"})
-    if not chosen_movie:
-        raise HTTPException(status_code=404, detail="Movie not found")
+    # Calculate reaction-based multiplier
+    reaction_mult = calculate_reaction_multiplier(choice.reaction_time_ms)
     
-    # Calculate points (1x for regular, 3x for super-like)
-    multiplier = 3 if choice.is_super_like else 1
+    # Super-like adds additional 2x on top of reaction multiplier
+    if choice.is_super_like:
+        reaction_mult *= 2.0
     
-    # Update genre preferences
-    for genre in chosen_movie.get("genres", []):
-        gname = genre.get("name", "")
-        if gname:
-            session["genre_preferences"][gname] = session["genre_preferences"].get(gname, 0) + multiplier
+    # Handle "Can't Decide" - equal points to both
+    if choice.is_cant_decide:
+        for movie_id in [choice.chosen_movie_id, choice.rejected_movie_id]:
+            movie_data = tmdb_request(f"/movie/{movie_id}", {"append_to_response": "keywords,credits"})
+            if movie_data:
+                await update_movie_score(session, movie_id, movie_data, reaction_mult * 0.5)
+        
+        # For can't decide, the "king" stays, we just get a new challenger
+        winner_id = session.get("current_king")
+        if not winner_id:
+            winner_id = choice.chosen_movie_id  # First round default
+    else:
+        # Normal choice - winner gets points
+        chosen_data = tmdb_request(f"/movie/{choice.chosen_movie_id}", {"append_to_response": "keywords,credits"})
+        if chosen_data:
+            await update_movie_score(session, choice.chosen_movie_id, chosen_data, reaction_mult)
+        
+        winner_id = choice.chosen_movie_id
     
-    # Update director preferences
-    for crew in chosen_movie.get("credits", {}).get("crew", []):
-        if crew.get("job") == "Director":
-            dname = crew.get("name", "")
-            if dname:
-                session["director_preferences"][dname] = session["director_preferences"].get(dname, 0) + multiplier
-    
-    # Update keyword preferences
-    for keyword in chosen_movie.get("keywords", {}).get("keywords", [])[:5]:
-        kname = keyword.get("name", "")
-        if kname:
-            session["keyword_preferences"][kname] = session["keyword_preferences"].get(kname, 0) + multiplier
+    # Update the king (winner stays)
+    session["current_king"] = winner_id
     
     # Record choice
     session["choices"].append({
         "round": choice.round_number,
         "chosen": choice.chosen_movie_id,
         "rejected": choice.rejected_movie_id,
-        "super_like": choice.is_super_like
+        "reaction_time_ms": choice.reaction_time_ms,
+        "reaction_multiplier": reaction_mult,
+        "super_like": choice.is_super_like,
+        "cant_decide": choice.is_cant_decide
     })
     
-    # Calculate confidence scores for potential recommendations
-    confidence_movies = await calculate_game_confidence(session)
+    # Check if game is over (10 rounds)
+    if choice.round_number >= 10:
+        return await end_game(choice.session_id)
     
-    # Check termination conditions
-    high_confidence = [m for m in confidence_movies if m["confidence"] >= 95]
-    
-    if len(high_confidence) >= 3 or choice.round_number >= 20:
-        # Game over - return results
-        top_3 = sorted(confidence_movies, key=lambda x: x["confidence"], reverse=True)[:3]
-        
-        # Clean up session
-        del game_sessions[choice.session_id]
-        
-        return {
-            "game_over": True,
-            "round": choice.round_number,
-            "recommendations": top_3,
-            "total_rounds": choice.round_number
-        }
-    
-    # Continue game - get next pair
+    # Get next round - king stays, get new challenger
     session["round"] = choice.round_number + 1
-    next_movies = await get_polar_opposite_movies(choice.session_id)
     
-    # Calculate current top confidence for display
-    top_confidence = sorted(confidence_movies, key=lambda x: x["confidence"], reverse=True)[:3]
+    # Get the king movie details for display
+    king_movie = await get_formatted_movie(winner_id)
+    
+    # Get a new challenger (dissimilar to king)
+    challenger = await get_challenger_movie(choice.session_id, winner_id)
+    
+    # Determine king position (left or right, for UI consistency)
+    king_position = "left"  # King always stays on left
     
     return {
         "game_over": False,
         "round": session["round"],
-        "max_rounds": 20,
-        "movies": next_movies,
-        "current_top": [{"title": m["title"], "confidence": m["confidence"]} for m in top_confidence]
+        "max_rounds": 10,
+        "movies": [king_movie, challenger],
+        "king_position": king_position,
+        "current_scores": get_top_scores(session, 3)
     }
 
 
 @api_router.post("/game/skip")
 async def skip_game_round(session_id: str = "", round_number: int = 0, current_user: dict = Depends(get_current_user)):
-    """Skip current round without making a choice"""
+    """
+    Skip: 0 points to either. Replace the oldest card (or both in round 1).
+    """
     session = game_sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Game session not found")
     
-    if round_number >= 20:
-        # Game over due to max rounds
-        confidence_movies = await calculate_game_confidence(session)
-        top_3 = sorted(confidence_movies, key=lambda x: x["confidence"], reverse=True)[:3]
-        del game_sessions[session_id]
-        
-        return {
-            "game_over": True,
-            "round": round_number,
-            "recommendations": top_3,
-            "total_rounds": round_number
-        }
+    if round_number >= 10:
+        return await end_game(session_id)
     
     session["round"] = round_number + 1
-    next_movies = await get_polar_opposite_movies(session_id)
+    
+    # For skip, we don't keep the king - get two fresh movies
+    session["current_king"] = None
+    movies = await get_game_movie_pair(session_id, is_first_round=True)
     
     return {
         "game_over": False,
         "round": session["round"],
-        "max_rounds": 20,
-        "movies": next_movies
+        "max_rounds": 10,
+        "movies": movies,
+        "king_position": None,
+        "current_scores": get_top_scores(session, 3)
     }
 
 
-async def get_polar_opposite_movies(session_id: str) -> list:
+@api_router.post("/game/cant-decide")
+async def cant_decide_round(session_id: str = "", round_number: int = 0, 
+                            movie1_id: int = 0, movie2_id: int = 0,
+                            reaction_time_ms: int = 3000,
+                            current_user: dict = Depends(get_current_user)):
     """
-    Get two movies that are polar opposites in genre, cast, and vibe.
+    Can't Decide: Equal preference points to both movies.
+    Keep the king, replace the challenger.
     """
+    session = game_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game session not found")
+    
+    # Calculate reaction multiplier (halved for both since it's a tie)
+    reaction_mult = calculate_reaction_multiplier(reaction_time_ms) * 0.5
+    
+    # Award equal points to both movies
+    for movie_id in [movie1_id, movie2_id]:
+        movie_data = tmdb_request(f"/movie/{movie_id}", {"append_to_response": "keywords,credits"})
+        if movie_data:
+            await update_movie_score(session, movie_id, movie_data, reaction_mult)
+    
+    # Record the choice
+    session["choices"].append({
+        "round": round_number,
+        "chosen": None,
+        "rejected": None,
+        "both_movies": [movie1_id, movie2_id],
+        "reaction_time_ms": reaction_time_ms,
+        "cant_decide": True
+    })
+    
+    if round_number >= 10:
+        return await end_game(session_id)
+    
+    session["round"] = round_number + 1
+    
+    # Keep the king if exists, get new challenger
+    king_id = session.get("current_king")
+    if king_id:
+        king_movie = await get_formatted_movie(king_id)
+        challenger = await get_challenger_movie(session_id, king_id)
+        movies = [king_movie, challenger]
+        king_position = "left"
+    else:
+        movies = await get_game_movie_pair(session_id, is_first_round=True)
+        king_position = None
+    
+    return {
+        "game_over": False,
+        "round": session["round"],
+        "max_rounds": 10,
+        "movies": movies,
+        "king_position": king_position,
+        "current_scores": get_top_scores(session, 3)
+    }
+
+
+async def update_movie_score(session: dict, movie_id: int, movie_data: dict, multiplier: float):
+    """Update preference scores for a movie based on its metadata"""
     global GENRE_MAP
-    session = game_sessions.get(session_id, {})
-    movies_seen = session.get("movies_seen", set())
     
-    # Fetch a diverse pool of movies
-    movie_pool = []
-    
-    # Get movies from different vibes
-    for vibe, genre_ids in GENRE_VIBES.items():
-        if genre_ids:
-            data = tmdb_request("/discover/movie", {
-                "with_genres": str(genre_ids[0]),
-                "sort_by": "popularity.desc",
-                "vote_count.gte": 500,
-                "vote_average.gte": 6.0,
-                "page": 1
-            })
-            if data:
-                for m in data.get("results", [])[:8]:
-                    if m["id"] not in movies_seen:
-                        m["vibe"] = vibe
-                        movie_pool.append(m)
-    
-    # If not enough movies, add popular ones
-    if len(movie_pool) < 10:
-        popular = tmdb_request("/movie/popular")
-        if popular:
-            for m in popular.get("results", [])[:10]:
-                if m["id"] not in movies_seen and m not in movie_pool:
-                    m["vibe"] = "mixed"
-                    movie_pool.append(m)
-    
-    # Find two movies with opposite vibes
-    import random
-    random.shuffle(movie_pool)
-    
-    movie1 = None
-    movie2 = None
-    
-    for m in movie_pool:
-        if not movie1:
-            movie1 = m
-            continue
-        
-        # Check if this movie is opposite to movie1
-        m1_vibe = movie1.get("vibe", "mixed")
-        m2_vibe = m.get("vibe", "mixed")
-        
-        # Check genre overlap
-        m1_genres = set(movie1.get("genre_ids", []))
-        m2_genres = set(m.get("genre_ids", []))
-        genre_overlap = len(m1_genres & m2_genres)
-        
-        # Prefer movies with minimal genre overlap and different vibes
-        if genre_overlap <= 1 and m1_vibe != m2_vibe:
-            movie2 = m
-            break
-    
-    # Fallback if no good opposite found
-    if not movie2 and len(movie_pool) > 1:
-        movie2 = movie_pool[1] if movie_pool[0] == movie1 else movie_pool[0]
-    
-    if not movie1 or not movie2:
-        # Ultimate fallback
-        popular = tmdb_request("/movie/popular")
-        if popular and len(popular.get("results", [])) >= 2:
-            results = popular["results"]
-            movie1 = results[0]
-            movie2 = results[1]
-    
-    # Mark as seen
-    if movie1:
-        movies_seen.add(movie1["id"])
-    if movie2:
-        movies_seen.add(movie2["id"])
-    session["movies_seen"] = movies_seen
-    
-    # Format response
-    def format_movie(m):
-        if not m:
-            return None
-        return {
-            "id": m.get("id"),
-            "title": m.get("title", ""),
-            "poster_path": m.get("poster_path"),
-            "backdrop_path": m.get("backdrop_path"),
-            "overview": m.get("overview", ""),
-            "release_date": m.get("release_date", ""),
-            "vote_average": m.get("vote_average", 0),
-            "genre_ids": m.get("genre_ids", []),
-            "genres": [GENRE_MAP.get(gid, "") for gid in m.get("genre_ids", []) if GENRE_MAP.get(gid)]
+    # Initialize or update movie score
+    if movie_id not in session["movie_scores"]:
+        session["movie_scores"][movie_id] = {
+            "id": movie_id,
+            "title": movie_data.get("title", ""),
+            "poster_path": movie_data.get("poster_path"),
+            "overview": movie_data.get("overview", ""),
+            "vote_average": movie_data.get("vote_average", 0),
+            "total_score": 0,
+            "selections": 0
         }
     
-    return [format_movie(movie1), format_movie(movie2)]
+    session["movie_scores"][movie_id]["total_score"] += multiplier
+    session["movie_scores"][movie_id]["selections"] += 1
+    
+    # Update genre preferences
+    for genre in movie_data.get("genres", []):
+        gname = genre.get("name", "")
+        if gname:
+            session["genre_preferences"][gname] = session["genre_preferences"].get(gname, 0) + multiplier
+    
+    # Update director preferences
+    for crew in movie_data.get("credits", {}).get("crew", []):
+        if crew.get("job") == "Director":
+            dname = crew.get("name", "")
+            if dname:
+                session["director_preferences"][dname] = session["director_preferences"].get(dname, 0) + multiplier
 
 
-async def calculate_game_confidence(session: dict) -> list:
-    """
-    Calculate confidence scores for movie recommendations based on game choices.
-    """
+def get_top_scores(session: dict, limit: int = 3) -> list:
+    """Get top scoring movies"""
+    scores = session.get("movie_scores", {})
+    sorted_scores = sorted(scores.values(), key=lambda x: x["total_score"], reverse=True)
+    return [
+        {"id": m["id"], "title": m["title"], "score": round(m["total_score"], 1)}
+        for m in sorted_scores[:limit]
+    ]
+
+
+async def end_game(session_id: str) -> dict:
+    """End the game and return final recommendations"""
+    global GENRE_MAP
+    session = game_sessions.get(session_id)
+    if not session:
+        return {"game_over": True, "recommendations": [], "total_rounds": 0}
+    
+    # Get top 3 from direct movie scores
+    direct_scores = session.get("movie_scores", {})
+    
+    # Also calculate recommendations based on learned preferences
+    recommendations = await calculate_final_recommendations(session)
+    
+    # Merge direct scores with preference-based recommendations
+    final_results = []
+    seen_ids = set()
+    
+    # First add directly scored movies
+    for movie_id, data in sorted(direct_scores.items(), key=lambda x: x[1]["total_score"], reverse=True)[:5]:
+        if movie_id not in seen_ids:
+            final_results.append({
+                "id": movie_id,
+                "title": data["title"],
+                "poster_path": data["poster_path"],
+                "overview": data["overview"],
+                "vote_average": data["vote_average"],
+                "confidence": min(99, round(data["total_score"] * 10, 1)),
+                "source": "direct_choice"
+            })
+            seen_ids.add(movie_id)
+    
+    # Add preference-based recommendations
+    for rec in recommendations:
+        if rec["id"] not in seen_ids and len(final_results) < 5:
+            final_results.append(rec)
+            seen_ids.add(rec["id"])
+    
+    # Take top 3
+    top_3 = final_results[:3]
+    
+    # Clean up session
+    total_rounds = session.get("round", 0)
+    del game_sessions[session_id]
+    
+    return {
+        "game_over": True,
+        "recommendations": top_3,
+        "total_rounds": total_rounds
+    }
+
+
+async def get_game_movie_pair(session_id: str, is_first_round: bool = False) -> list:
+    """Get two dissimilar movies for a round"""
+    global GENRE_MAP
+    session = game_sessions.get(session_id, {})
+    
+    movie1 = await get_next_movie_from_pool(session_id)
+    movie2 = await get_challenger_movie(session_id, movie1["id"] if movie1 else None)
+    
+    return [movie1, movie2]
+
+
+async def get_next_movie_from_pool(session_id: str) -> dict:
+    """Get next movie from user's pool (Diary/Watchlist) or similar movies"""
+    global GENRE_MAP
+    session = game_sessions.get(session_id, {})
+    movie_pool = session.get("movie_pool", [])
+    movies_used = session.get("movies_used", set())
+    
+    # Try to get from user's pool first
+    for movie in movie_pool:
+        if movie["id"] not in movies_used:
+            movies_used.add(movie["id"])
+            session["movies_used"] = movies_used
+            return await get_formatted_movie(movie["id"])
+    
+    # Pool exhausted - fetch similar movies based on highly-rated films
+    if not session.get("similar_movies_fetched"):
+        await fetch_similar_movies(session_id)
+        session["similar_movies_fetched"] = True
+        
+        # Try again from expanded pool
+        movie_pool = session.get("movie_pool", [])
+        for movie in movie_pool:
+            if movie["id"] not in movies_used:
+                movies_used.add(movie["id"])
+                session["movies_used"] = movies_used
+                return await get_formatted_movie(movie["id"])
+    
+    # Ultimate fallback - get popular movie
+    popular = tmdb_request("/movie/popular")
+    if popular:
+        for m in popular.get("results", []):
+            if m["id"] not in movies_used:
+                movies_used.add(m["id"])
+                session["movies_used"] = movies_used
+                return await get_formatted_movie(m["id"])
+    
+    return None
+
+
+async def fetch_similar_movies(session_id: str):
+    """Fetch similar movies based on user's highly-rated films"""
+    session = game_sessions.get(session_id, {})
+    user_id = session.get("user_id")
+    movie_pool = session.get("movie_pool", [])
+    movie_pool_ids = session.get("movie_pool_ids", set())
+    
+    if not user_id:
+        return
+    
+    # Get highly-rated movies from diary
+    watch_history = await db.watch_history.find(
+        {"user_id": user_id, "user_rating": {"$gte": 7.5}},
+        {"_id": 0, "tmdb_id": 1}
+    ).to_list(10)
+    
+    # Fetch similar movies for each highly-rated film
+    for h in watch_history[:5]:
+        similar = tmdb_request(f"/movie/{h['tmdb_id']}/similar")
+        if similar:
+            for m in similar.get("results", [])[:5]:
+                if m["id"] not in movie_pool_ids:
+                    movie_pool.append({
+                        "id": m["id"],
+                        "title": m.get("title", ""),
+                        "poster_path": m.get("poster_path"),
+                        "source": "similar"
+                    })
+                    movie_pool_ids.add(m["id"])
+    
+    session["movie_pool"] = movie_pool
+    session["movie_pool_ids"] = movie_pool_ids
+
+
+async def get_challenger_movie(session_id: str, king_id: int = None) -> dict:
+    """Get a challenger movie that's dissimilar to the king"""
+    global GENRE_MAP
+    session = game_sessions.get(session_id, {})
+    movies_used = session.get("movies_used", set())
+    
+    king_vibe = None
+    king_genres = set()
+    
+    if king_id:
+        king_data = tmdb_request(f"/movie/{king_id}")
+        if king_data:
+            king_genres = set(g.get("id") for g in king_data.get("genres", []))
+            king_vibe = get_movie_vibe(list(king_genres))
+    
+    # Try to find a dissimilar movie from pool
+    movie_pool = session.get("movie_pool", [])
+    for movie in movie_pool:
+        if movie["id"] not in movies_used and movie["id"] != king_id:
+            # Check if dissimilar
+            movie_data = tmdb_request(f"/movie/{movie['id']}")
+            if movie_data:
+                movie_genres = set(g.get("id") for g in movie_data.get("genres", []))
+                movie_vibe = get_movie_vibe(list(movie_genres))
+                
+                # Check dissimilarity
+                genre_overlap = len(king_genres & movie_genres) if king_genres else 0
+                
+                if genre_overlap <= 1 or movie_vibe != king_vibe:
+                    movies_used.add(movie["id"])
+                    session["movies_used"] = movies_used
+                    return await get_formatted_movie(movie["id"])
+    
+    # If no dissimilar found in pool, fetch from TMDB based on opposite vibe
+    opposite_vibe = {
+        "light": "dark", "dark": "light",
+        "action": "drama", "drama": "action",
+        "documentary": "light", "mixed": "action"
+    }.get(king_vibe, "drama")
+    
+    opposite_genres = GENRE_VIBES.get(opposite_vibe, [28])
+    if opposite_genres:
+        data = tmdb_request("/discover/movie", {
+            "with_genres": str(opposite_genres[0]),
+            "sort_by": "popularity.desc",
+            "vote_count.gte": 200
+        })
+        if data:
+            for m in data.get("results", []):
+                if m["id"] not in movies_used:
+                    movies_used.add(m["id"])
+                    session["movies_used"] = movies_used
+                    return await get_formatted_movie(m["id"])
+    
+    # Fallback to any unused movie
+    return await get_next_movie_from_pool(session_id)
+
+
+async def get_formatted_movie(movie_id: int) -> dict:
+    """Get formatted movie data for frontend"""
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    movie = tmdb_request(f"/movie/{movie_id}")
+    if not movie:
+        return None
+    
+    return {
+        "id": movie.get("id"),
+        "title": movie.get("title", ""),
+        "poster_path": movie.get("poster_path"),
+        "backdrop_path": movie.get("backdrop_path"),
+        "overview": movie.get("overview", ""),
+        "release_date": movie.get("release_date", ""),
+        "vote_average": movie.get("vote_average", 0),
+        "genre_ids": [g.get("id") for g in movie.get("genres", [])],
+        "genres": [g.get("name", "") for g in movie.get("genres", [])]
+    }
+
+
+async def calculate_final_recommendations(session: dict) -> list:
+    """Calculate recommendations based on learned preferences"""
     global GENRE_MAP
     
     genre_prefs = session.get("genre_preferences", {})
     director_prefs = session.get("director_preferences", {})
-    keyword_prefs = session.get("keyword_preferences", {})
     
-    if not genre_prefs and not director_prefs:
+    if not genre_prefs:
         return []
     
-    # Normalize preferences
-    max_genre = max(genre_prefs.values()) if genre_prefs else 1
-    max_director = max(director_prefs.values()) if director_prefs else 1
-    max_keyword = max(keyword_prefs.values()) if keyword_prefs else 1
-    
-    # Get candidate movies based on top preferences
     candidates = []
-    seen_ids = set()
+    seen_ids = set(session.get("movies_used", set()))
     
     # Get top genres
-    top_genres = sorted(genre_prefs.items(), key=lambda x: x[1], reverse=True)[:3]
+    top_genres = sorted(genre_prefs.items(), key=lambda x: x[1], reverse=True)[:2]
     for genre_name, _ in top_genres:
-        # Find genre ID
         genre_id = None
         for gid, gname in GENRE_MAP.items():
             if gname == genre_name:
@@ -2967,74 +3213,37 @@ async def calculate_game_confidence(session: dict) -> list:
             data = tmdb_request("/discover/movie", {
                 "with_genres": str(genre_id),
                 "sort_by": "vote_average.desc",
-                "vote_count.gte": 200,
-                "vote_average.gte": 7.0
+                "vote_count.gte": 200
             })
             if data:
-                for m in data.get("results", [])[:10]:
+                for m in data.get("results", [])[:5]:
                     if m["id"] not in seen_ids:
                         candidates.append(m)
                         seen_ids.add(m["id"])
     
-    # Get movies by top directors
-    top_directors = sorted(director_prefs.items(), key=lambda x: x[1], reverse=True)[:2]
-    for director_name, _ in top_directors:
-        search = tmdb_request("/search/person", {"query": director_name})
-        if search and search.get("results"):
-            person_id = search["results"][0].get("id")
-            if person_id:
-                credits = tmdb_request(f"/person/{person_id}/movie_credits")
-                if credits:
-                    for m in credits.get("crew", []):
-                        if m.get("job") == "Director" and m.get("id") not in seen_ids:
-                            movie_data = tmdb_request(f"/movie/{m['id']}")
-                            if movie_data and movie_data.get("vote_count", 0) > 50:
-                                candidates.append(movie_data)
-                                seen_ids.add(m["id"])
-                                if len(candidates) >= 30:
-                                    break
+    # Score candidates
+    max_genre = max(genre_prefs.values()) if genre_prefs else 1
     
-    # Score each candidate
     scored = []
-    for movie in candidates[:30]:
-        confidence = 0.0
+    for movie in candidates[:10]:
+        score = 0
+        movie_genres = [GENRE_MAP.get(gid, "") for gid in movie.get("genre_ids", [])]
         
-        # Genre scoring (50% weight)
-        movie_genres = [g.get("name", "") for g in movie.get("genres", [])]
-        if not movie_genres and movie.get("genre_ids"):
-            movie_genres = [GENRE_MAP.get(gid, "") for gid in movie.get("genre_ids", [])]
-        
-        genre_score = 0
         for g in movie_genres:
             if g in genre_prefs:
-                genre_score += genre_prefs[g] / max_genre
+                score += genre_prefs[g] / max_genre
+        
         if movie_genres:
-            genre_score /= len(movie_genres)
-        confidence += genre_score * 50
-        
-        # Director scoring (30% weight)
-        credits = movie.get("credits", {})
-        directors = [c["name"] for c in credits.get("crew", []) if c.get("job") == "Director"]
-        director_score = 0
-        for d in directors:
-            if d in director_prefs:
-                director_score = max(director_score, director_prefs[d] / max_director)
-        confidence += director_score * 30
-        
-        # Quality bonus (20% weight)
-        vote_avg = movie.get("vote_average", 0)
-        if vote_avg >= 7.0:
-            confidence += ((vote_avg - 7.0) / 3.0) * 20
+            score /= len(movie_genres)
         
         scored.append({
-            "id": movie.get("id"),
+            "id": movie["id"],
             "title": movie.get("title", ""),
             "poster_path": movie.get("poster_path"),
-            "backdrop_path": movie.get("backdrop_path"),
             "overview": movie.get("overview", ""),
-            "vote_average": vote_avg,
-            "genres": movie_genres[:3],
-            "confidence": round(min(100, confidence), 1)
+            "vote_average": movie.get("vote_average", 0),
+            "confidence": round(min(95, score * 50 + 40), 1),
+            "source": "preference_match"
         })
     
     return sorted(scored, key=lambda x: x["confidence"], reverse=True)

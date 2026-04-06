@@ -3,13 +3,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Home, Sliders, Shuffle, Bookmark, Gamepad2 } from "lucide-react";
 
-const NavItem = ({ icon: Icon, label, isActive, onClick }) => {
+const NavItem = ({ icon: Icon, label, isActive, onClick, testId }) => {
   return (
     <motion.button
       onClick={onClick}
       className="relative flex flex-col items-center gap-1 group"
       whileHover={{ scale: 1.1 }}
       whileTap={{ scale: 0.95 }}
+      data-testid={testId}
     >
       <Icon 
         className={`w-5 h-5 transition-all duration-300 stroke-1
@@ -93,6 +94,7 @@ const FloatingNav = ({ onVibeClick, onRandomClick, onGameClick }) => {
         label="Game"
         isActive={false}
         onClick={onGameClick}
+        testId="nav-game-btn"
       />
     </nav>
   );
