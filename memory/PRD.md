@@ -81,6 +81,11 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - `POST /api/movies/comfort` - Comfort movies
 - `POST /api/movies/feeling-search` - Semantic search
 - `GET /api/genres` - List all genres
+- **Movie Game Endpoints:**
+  - `POST /api/game/start` - Start 10-round King of the Hill game
+  - `POST /api/game/choose` - Submit movie choice with reaction time
+  - `POST /api/game/skip` - Skip round (0 points, fresh matchup)
+  - `POST /api/game/cant-decide` - Equal points to both, keep King
 
 ## DB Schema (MongoDB)
 - **auth_users**: {id, email, username, password_hash, birth_year, birth_date, avatar_url, favorite_genres, favorite_actors, favorite_movies, favorite_directors, streaming_services, location_permission, location, gender, bio, letterboxd_connected, letterboxd_count, created_at}
@@ -97,14 +102,18 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] Floating bottom nav (Home, Vibe, Random, My Movies, Game)
 - [x] Vibe Console with mood/energy/brain power sliders
 - [x] "Hangry Hail Mary" random picks modal
-- [x] **Movie Game (This or That):**
-  - [x] Two polar-opposite movies displayed side-by-side
-  - [x] Tap to select (+1 preference point to genre/director/keywords)
-  - [x] Swipe up for Super-Like (3x multiplier)
-  - [x] Skip button to pass
-  - [x] Confidence scoring algorithm tracking genre/director/keyword preferences
-  - [x] Terminates at 3 movies with ≥95% confidence OR 20 rounds
-  - [x] Results screen with top 3 recommendations and Play Again button
+- [x] **Movie Game (King of the Hill):**
+  - [x] Two movies displayed side-by-side - winner stays as "King" to face new challenger
+  - [x] Tap to select - King of the Hill mechanic (winner stays on left with crown badge)
+  - [x] Swipe up for Super-Like (2x multiplier on top of reaction time multiplier)
+  - [x] Reaction time scoring: Fast (<2s) = up to 3x, Slow (>5s) = 0.5x
+  - [x] Skip button - 0 points, fresh matchup (resets King)
+  - [x] Can't Decide button - Equal points to both movies, King stays
+  - [x] 10-round game with progress bar
+  - [x] Current Leaders display showing top scoring movies
+  - [x] Reaction time indicator (e.g., "2.1s" or "5.5s Hesitant")
+  - [x] Results screen with top 3 recommendations (confidence %, TMDB rating) and Play Again button
+  - [x] Movies sourced from user's Diary/Watchlist first, then TMDB trending/similar
 - [x] Semantic feeling search bar
 - [x] Movie detail modal with trailer, cast, similar, streaming availability
 - [x] JWT authentication (signup + login + forgot password)
@@ -142,4 +151,8 @@ Build a context-aware movie recommendation engine called "Chef" with:
 ## Future Tasks (P2)
 - [ ] JustWatch API Integration - Replace/augment MoviesOfTheNight for streaming availability
 - [ ] Refactor App.js into React Context providers
-- [ ] Split backend/server.py into routers, models, services
+- [ ] Split backend/server.py into routers, models, services (currently 4500+ lines)
+- [ ] Persist game sessions to MongoDB (currently in-memory - lost on server restart)
+
+## Session Notes (April 2026)
+- **Movie Game V2 Complete**: Implemented King of the Hill mechanic with reaction-time scoring, Super Like, Skip, Can't Decide features. Tested and verified 100% backend/frontend success rate.

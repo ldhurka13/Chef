@@ -521,7 +521,7 @@ const MovieGame = ({ open, onOpenChange }) => {
 
               {/* Movie Cards */}
               <div className="flex items-center justify-center gap-6 w-full mb-8">
-                <AnimatePresence mode="wait">
+                <AnimatePresence mode="sync">
                   <SwipeableCard
                     key={`left-${round}-${movies[0]?.id}`}
                     movie={movies[0]}
@@ -533,7 +533,7 @@ const MovieGame = ({ open, onOpenChange }) => {
                     roundStartTime={roundStartTime}
                   />
                   
-                  <div className="text-chef-muted/50 font-serif text-2xl">vs</div>
+                  <div key={`vs-${round}`} className="text-chef-muted/50 font-serif text-2xl">vs</div>
                   
                   <SwipeableCard
                     key={`right-${round}-${movies[1]?.id}`}
