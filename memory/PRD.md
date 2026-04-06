@@ -94,10 +94,17 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] Full dark cinematic UI with Playfair Display / Inter fonts
 - [x] Hero section with trending movie
 - [x] 6-section navigation (Curated, Chef's Special, Swangy, Classics, Explore, Marathon)
-- [x] Floating bottom nav (Home, Vibe, Random, My Movies, Comfort)
+- [x] Floating bottom nav (Home, Vibe, Random, My Movies, Game)
 - [x] Vibe Console with mood/energy/brain power sliders
 - [x] "Hangry Hail Mary" random picks modal
-- [x] "Comfort Snacks" modal with weather-aware recommendations
+- [x] **Movie Game (This or That):**
+  - [x] Two polar-opposite movies displayed side-by-side
+  - [x] Tap to select (+1 preference point to genre/director/keywords)
+  - [x] Swipe up for Super-Like (3x multiplier)
+  - [x] Skip button to pass
+  - [x] Confidence scoring algorithm tracking genre/director/keyword preferences
+  - [x] Terminates at 3 movies with ≥95% confidence OR 20 rounds
+  - [x] Results screen with top 3 recommendations and Play Again button
 - [x] Semantic feeling search bar
 - [x] Movie detail modal with trailer, cast, similar, streaming availability
 - [x] JWT authentication (signup + login + forgot password)
