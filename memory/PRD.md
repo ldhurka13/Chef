@@ -102,18 +102,23 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] Floating bottom nav (Home, Vibe, Random, My Movies, Game)
 - [x] Vibe Console with mood/energy/brain power sliders
 - [x] "Hangry Hail Mary" random picks modal
-- [x] **Movie Game (King of the Hill):**
-  - [x] Two movies displayed side-by-side - winner stays as "King" to face new challenger
-  - [x] Tap to select - King of the Hill mechanic (winner stays on left with crown badge)
-  - [x] Swipe up for Super-Like (2x multiplier on top of reaction time multiplier)
-  - [x] Reaction time scoring: Fast (<2s) = up to 3x, Slow (>5s) = 0.5x
-  - [x] Skip button - 0 points, fresh matchup (resets King)
-  - [x] Can't Decide button - Equal points to both movies, King stays
-  - [x] 10-round game with progress bar
-  - [x] Current Leaders display showing top scoring movies
-  - [x] Reaction time indicator (e.g., "2.1s" or "5.5s Hesitant")
-  - [x] Results screen with top 3 recommendations (confidence %, TMDB rating) and Play Again button
-  - [x] Movies sourced from user's Diary/Watchlist first, then TMDB trending/similar
+- [x] **Movie Game (Eliminative Logic Discovery Engine):**
+  - [x] Training Pool: ONLY movies from user's Watch History/Diary (seen films)
+  - [x] Discovery Pool: Movies NOT in user's watch history (for final recommendations)
+  - [x] Eliminative Logic: Maximally dissimilar pairs (different genres, eras, directors)
+  - [x] King of the Hill: Winner stays on left with crown badge, loser replaced
+  - [x] Reaction-Time Scoring:
+    - Fast (<2s): +5 points (strong preference)
+    - Average (2-5s): +2 points (standard)
+    - Slow (>5s): +1 point (hesitant)
+  - [x] Recency Bias: Last 3 rounds (8-10) weighted 1.3x, first 3 rounds (1-3) weighted 0.8x
+  - [x] Super Like (swipe up): 2x multiplier on top of reaction score
+  - [x] Skip: 0 points, keeps King if exists, fresh matchup otherwise
+  - [x] Can't Decide: Equal points (+2) to both movies, King stays
+  - [x] 10-round strict limit with progress bar
+  - [x] Discovery Output: Top 3 movies from Discovery Pool with vector similarity matching
+  - [x] "Why you'll like this" snippets (e.g., "Directed by Francis Ford Coppola, whom you love")
+  - [x] Game Summary: Shows top genres, directors, and fast decision count
 - [x] Semantic feeling search bar
 - [x] Movie detail modal with trailer, cast, similar, streaming availability
 - [x] JWT authentication (signup + login + forgot password)
@@ -156,3 +161,12 @@ Build a context-aware movie recommendation engine called "Chef" with:
 
 ## Session Notes (April 2026)
 - **Movie Game V2 Complete**: Implemented King of the Hill mechanic with reaction-time scoring, Super Like, Skip, Can't Decide features. Tested and verified 100% backend/frontend success rate.
+
+## Session Notes (May 2026)
+- **Movie Game V3 - Eliminative Logic Discovery Engine**: Major refinement implementing:
+  - Data Segmentation: Training Pool (Diary only) vs Discovery Pool (unseen movies)
+  - Eliminative Logic: Maximally dissimilar movie pairs for rapid mood mapping
+  - Refined Scoring: Fast (<2s)=+5, Average (2-5s)=+2, Slow (>5s)=+1
+  - Recency Bias: Last 3 rounds weighted 1.3x, first 3 weighted 0.8x
+  - Discovery Output: Top 3 unseen movies with "Why you'll like this" snippets
+- **Sort & Filter for My Movies**: Added sort (by date, rating, title, watch count) and filter (by source) to Diary and Watchlist tabs

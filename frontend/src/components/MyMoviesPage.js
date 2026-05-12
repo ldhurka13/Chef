@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Plus, Check, Film, Loader2, Trash2, Calendar, Star, X,
-  BookOpen, Bookmark, User, Clapperboard, Users, Heart, MessageSquare, Pencil, RotateCcw, AlertTriangle
+  BookOpen, Bookmark, User, Clapperboard, Users, Heart, MessageSquare, Pencil, RotateCcw, AlertTriangle,
+  ArrowUpDown, SlidersHorizontal, ChevronDown, Filter
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -18,6 +19,63 @@ const TABS = [
 
 const getToken = () => localStorage.getItem("chef_token");
 const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
+
+// ========== SORT & FILTER DROPDOWN ==========
+const SortFilterDropdown = ({ label, icon: Icon, value, options, onChange, testId }) => {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find((o) => o.value === value);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors
+          ${open ? "bg-chef-teal/10 border-chef-teal/30 text-chef-teal" : "bg-chef-surface/60 border-white/10 text-chef-muted hover:text-chef-platinum hover:bg-white/5"}
+          border`}
+        data-testid={testId}
+      >
+        <Icon className="w-3.5 h-3.5" />
+        <span>{label}:</span>
+        <span className="text-chef-platinum font-medium">{selectedOption?.label}</span>
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="absolute top-full left-0 mt-1 z-30 min-w-[160px] bg-chef-surface/95 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden shadow-cinematic"
+          >
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                className={`w-full px-4 py-2.5 text-left text-xs transition-colors
+                  ${value === opt.value ? "bg-chef-teal/10 text-chef-teal" : "text-chef-muted hover:text-chef-platinum hover:bg-white/5"}`}
+                data-testid={`${testId}-${opt.value}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 // ========== DIARY DETAIL MODAL ==========
 const DiaryDetailModal = ({ movie, onClose, onMovieUpdated, onMovieRemoved }) => {
@@ -385,6 +443,26 @@ const DiaryTab = () => {
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  
+  // Sort & Filter state
+  const [sortBy, setSortBy] = useState("date_desc");
+  const [filterSource, setFilterSource] = useState("all");
+
+  const SORT_OPTIONS = [
+    { value: "date_desc", label: "Newest First" },
+    { value: "date_asc", label: "Oldest First" },
+    { value: "rating_desc", label: "Highest Rated" },
+    { value: "rating_asc", label: "Lowest Rated" },
+    { value: "title_asc", label: "Title A-Z" },
+    { value: "title_desc", label: "Title Z-A" },
+    { value: "watches_desc", label: "Most Watched" },
+  ];
+
+  const FILTER_OPTIONS = [
+    { value: "all", label: "All Sources" },
+    { value: "manual", label: "Manual" },
+    { value: "letterboxd", label: "Letterboxd" },
+  ];
 
   useEffect(() => { fetchHistory(); }, []);
 
@@ -462,11 +540,50 @@ const DiaryTab = () => {
     }
   };
 
+  // Apply sorting and filtering
+  const getProcessedHistory = () => {
+    let filtered = [...watchHistory];
+    
+    // Filter by source
+    if (filterSource !== "all") {
+      filtered = filtered.filter((item) => 
+        filterSource === "letterboxd" ? item.source === "letterboxd" : item.source !== "letterboxd"
+      );
+    }
+    
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "date_desc":
+          return (b.last_watched_date || "").localeCompare(a.last_watched_date || "");
+        case "date_asc":
+          return (a.last_watched_date || "").localeCompare(b.last_watched_date || "");
+        case "rating_desc":
+          return (b.user_rating || 0) - (a.user_rating || 0);
+        case "rating_asc":
+          return (a.user_rating || 0) - (b.user_rating || 0);
+        case "title_asc":
+          return (a.title || "").localeCompare(b.title || "");
+        case "title_desc":
+          return (b.title || "").localeCompare(a.title || "");
+        case "watches_desc":
+          return (b.watch_count || 1) - (a.watch_count || 1);
+        default:
+          return 0;
+      }
+    });
+    
+    return filtered;
+  };
+
+  const processedHistory = getProcessedHistory();
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-chef-muted">
-          {watchHistory.length} movie{watchHistory.length !== 1 ? "s" : ""} tracked
+          {processedHistory.length} movie{processedHistory.length !== 1 ? "s" : ""} 
+          {filterSource !== "all" && ` (filtered from ${watchHistory.length})`}
         </p>
         {watchHistory.length > 0 && (
           <button
@@ -479,6 +596,28 @@ const DiaryTab = () => {
           </button>
         )}
       </div>
+
+      {/* Sort & Filter Controls */}
+      {watchHistory.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <SortFilterDropdown
+            label="Sort"
+            icon={ArrowUpDown}
+            value={sortBy}
+            options={SORT_OPTIONS}
+            onChange={setSortBy}
+            testId="diary-sort"
+          />
+          <SortFilterDropdown
+            label="Source"
+            icon={Filter}
+            value={filterSource}
+            options={FILTER_OPTIONS}
+            onChange={setFilterSource}
+            testId="diary-filter-source"
+          />
+        </div>
+      )}
 
       {/* Clear All Confirmation Modal */}
       <AnimatePresence>
@@ -641,9 +780,9 @@ const DiaryTab = () => {
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 text-chef-teal animate-spin" />
         </div>
-      ) : watchHistory.length > 0 ? (
+      ) : processedHistory.length > 0 ? (
         <div className="space-y-2">
-          {watchHistory.map((item) => (
+          {processedHistory.map((item) => (
             <motion.div
               key={item.tmdb_id}
               layout
@@ -689,6 +828,17 @@ const DiaryTab = () => {
             </motion.div>
           ))}
         </div>
+      ) : watchHistory.length > 0 ? (
+        <div className="text-center py-16">
+          <Filter className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
+          <p className="text-sm text-chef-muted/50">No movies match your filter</p>
+          <button 
+            onClick={() => setFilterSource("all")}
+            className="text-xs text-chef-teal hover:underline mt-2"
+          >
+            Clear filter
+          </button>
+        </div>
       ) : (
         <div className="text-center py-16">
           <Film className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
@@ -727,6 +877,27 @@ const WatchlistTab = () => {
   const [searching, setSearching] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  
+  // Sort & Filter state
+  const [sortBy, setSortBy] = useState("added_desc");
+  const [filterSource, setFilterSource] = useState("all");
+
+  const SORT_OPTIONS = [
+    { value: "added_desc", label: "Recently Added" },
+    { value: "added_asc", label: "First Added" },
+    { value: "rating_desc", label: "Highest Rated" },
+    { value: "rating_asc", label: "Lowest Rated" },
+    { value: "title_asc", label: "Title A-Z" },
+    { value: "title_desc", label: "Title Z-A" },
+    { value: "release_desc", label: "Newest Release" },
+    { value: "release_asc", label: "Oldest Release" },
+  ];
+
+  const FILTER_OPTIONS = [
+    { value: "all", label: "All Sources" },
+    { value: "manual", label: "Manual" },
+    { value: "letterboxd", label: "Letterboxd" },
+  ];
 
   useEffect(() => { fetchWatchlist(); }, []);
 
@@ -796,11 +967,52 @@ const WatchlistTab = () => {
     }
   };
 
+  // Apply sorting and filtering
+  const getProcessedWatchlist = () => {
+    let filtered = [...watchlist];
+    
+    // Filter by source
+    if (filterSource !== "all") {
+      filtered = filtered.filter((item) => 
+        filterSource === "letterboxd" ? item.source === "letterboxd" : item.source !== "letterboxd"
+      );
+    }
+    
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "added_desc":
+          return (b.added_at || "").localeCompare(a.added_at || "");
+        case "added_asc":
+          return (a.added_at || "").localeCompare(b.added_at || "");
+        case "rating_desc":
+          return (b.vote_average || 0) - (a.vote_average || 0);
+        case "rating_asc":
+          return (a.vote_average || 0) - (b.vote_average || 0);
+        case "title_asc":
+          return (a.title || "").localeCompare(b.title || "");
+        case "title_desc":
+          return (b.title || "").localeCompare(a.title || "");
+        case "release_desc":
+          return (b.release_date || "").localeCompare(a.release_date || "");
+        case "release_asc":
+          return (a.release_date || "").localeCompare(b.release_date || "");
+        default:
+          return 0;
+      }
+    });
+    
+    return filtered;
+  };
+
+  const processedWatchlist = getProcessedWatchlist();
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-chef-muted">
-          {watchlist.length} movie{watchlist.length !== 1 ? "s" : ""} to watch
+          {processedWatchlist.length} movie{processedWatchlist.length !== 1 ? "s" : ""} to watch
+          {filterSource !== "all" && ` (filtered from ${watchlist.length})`}
         </p>
         {watchlist.length > 0 && (
           <button
@@ -813,6 +1025,28 @@ const WatchlistTab = () => {
           </button>
         )}
       </div>
+
+      {/* Sort & Filter Controls */}
+      {watchlist.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <SortFilterDropdown
+            label="Sort"
+            icon={ArrowUpDown}
+            value={sortBy}
+            options={SORT_OPTIONS}
+            onChange={setSortBy}
+            testId="watchlist-sort"
+          />
+          <SortFilterDropdown
+            label="Source"
+            icon={Filter}
+            value={filterSource}
+            options={FILTER_OPTIONS}
+            onChange={setFilterSource}
+            testId="watchlist-filter-source"
+          />
+        </div>
+      )}
 
       {/* Clear All Confirmation Modal */}
       <AnimatePresence>
@@ -916,9 +1150,9 @@ const WatchlistTab = () => {
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 text-chef-teal animate-spin" />
         </div>
-      ) : watchlist.length > 0 ? (
+      ) : processedWatchlist.length > 0 ? (
         <div className="space-y-2">
-          {watchlist.map((item) => (
+          {processedWatchlist.map((item) => (
             <motion.div
               key={item.tmdb_id}
               layout
@@ -961,6 +1195,17 @@ const WatchlistTab = () => {
               </button>
             </motion.div>
           ))}
+        </div>
+      ) : watchlist.length > 0 ? (
+        <div className="text-center py-16">
+          <Filter className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
+          <p className="text-sm text-chef-muted/50">No movies match your filter</p>
+          <button 
+            onClick={() => setFilterSource("all")}
+            className="text-xs text-chef-teal hover:underline mt-2"
+          >
+            Clear filter
+          </button>
         </div>
       ) : (
         <div className="text-center py-16">

@@ -189,10 +189,21 @@ const ResultCard = ({ movie, rank }) => {
       
       <div className="flex-1 min-w-0">
         <h4 className="font-serif text-lg text-chef-platinum truncate">{movie.title}</h4>
+        
+        {/* Why you'll like this snippet */}
+        {movie.why_youll_like && (
+          <p className="text-xs text-amber-400/80 mt-1 italic line-clamp-2">
+            "{movie.why_youll_like}"
+          </p>
+        )}
+        
         <p className="text-sm text-chef-muted mt-1 line-clamp-2">{movie.overview}</p>
         <div className="flex items-center gap-3 mt-2">
           <span className="text-chef-teal font-medium">{movie.confidence}% Match</span>
           <span className="text-chef-muted text-sm">{movie.vote_average?.toFixed(1)} TMDB</span>
+          {movie.genres && movie.genres.length > 0 && (
+            <span className="text-chef-muted/60 text-xs">{movie.genres.slice(0, 2).join(", ")}</span>
+          )}
         </div>
       </div>
     </motion.div>
@@ -456,27 +467,30 @@ const MovieGame = ({ open, onOpenChange }) => {
               <h3 className="font-serif text-2xl text-chef-platinum mb-3">
                 King of the Hill
               </h3>
-              <p className="text-chef-muted max-w-md mb-8">
-                Choose between two movies - the winner stays to face a new challenger! 
-                Fast choices show strong preferences. Swipe up for super-like!
+              <p className="text-chef-muted max-w-md mb-4">
+                Battle through movies you've watched to discover new films you'll love!
+              </p>
+              <p className="text-xs text-chef-muted/60 max-w-sm mb-8">
+                We'll show you films from your diary. Make fast choices to reveal your true taste, 
+                then discover <span className="text-amber-400">new movies</span> matched to your preferences.
               </p>
               
               <div className="flex flex-col gap-3 text-sm text-chef-muted/80 mb-8">
                 <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span>Fast choice (&lt;2s) = +5 pts, strong preference</span>
+                </div>
+                <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-chef-teal" />
-                  <span>Tap a movie to select it - faster = higher score</span>
+                  <span>Average (2-5s) = +2 pts, standard</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-400" />
+                  <span>Slow (&gt;5s) = +1 pt, hesitant</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-amber-400" />
-                  <span>Swipe up for super-like (2x multiplier)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-purple-400" />
-                  <span>Can't Decide = equal points to both</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-white/30" />
-                  <span>Skip = 0 points, fresh matchup</span>
+                  <span>Swipe up = Super Like (2x bonus)</span>
                 </div>
               </div>
               
@@ -602,10 +616,10 @@ const MovieGame = ({ open, onOpenChange }) => {
               </div>
               
               <h3 className="font-serif text-2xl text-chef-platinum mb-2">
-                Your Perfect Movies
+                New Discoveries For You
               </h3>
               <p className="text-chef-muted mb-8">
-                Based on your choices and reaction times
+                Movies you haven't seen, matched to your taste
               </p>
 
               <div className="w-full max-w-xl space-y-4 mb-8">
