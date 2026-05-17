@@ -169,6 +169,12 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
+class AIVibeRequest(BaseModel):
+    brain_power: int = Field(ge=0, le=100, default=50)
+    mood: int = Field(ge=0, le=100, default=50)
+    energy: int = Field(ge=0, le=100, default=50)
+    include_rewatches: bool = False
+
 # ============ AUTH HELPERS ============
 
 def hash_password(password: str) -> str:
@@ -3564,6 +3570,342 @@ async def discover_movies(vibe_params: VibeParams):
         "total_pages": data.get("total_pages", 1),
         "total_results": data.get("total_results", 0)
     }
+
+
+# ============ AI VIBE RECOMMENDATIONS ============
+
+@api_router.post("/movies/ai-vibe-recommendations")
+async def get_ai_vibe_recommendations(
+    vibe_request: AIVibeRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    AI-powered vibe-based movie recommendations using LLM + web search.
+    Analyzes user's vibe parameters, profile, and watch history to find hidden gems.
+    """
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    import aiohttp
+    
+    EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+    
+    user_id = current_user.get("id") if current_user else None
+    
+    # Build user profile context
+    user_profile = {
+        "age": None,
+        "top_genres": [],
+        "top_actors": [],
+        "top_directors": [],
+        "watch_history": []
+    }
+    
+    if user_id:
+        # Get user data
+        user_data = await db.users.find_one({"id": user_id}, {"_id": 0})
+        if user_data:
+            birth_year = user_data.get("birth_year", 1995)
+            user_profile["age"] = datetime.now().year - birth_year
+            user_profile["top_genres"] = user_data.get("favorite_genres", [])
+            user_profile["top_actors"] = user_data.get("favorite_actors", [])
+            user_profile["top_directors"] = user_data.get("favorite_directors", [])
+        
+        # Get watch history (last 50 movies)
+        watch_history = await db.watch_history.find(
+            {"user_id": user_id},
+            {"_id": 0, "title": 1, "user_rating": 1, "tmdb_id": 1}
+        ).sort("last_watched_date", -1).to_list(50)
+        
+        user_profile["watch_history"] = [
+            {"title": w.get("title", ""), "rating": w.get("user_rating", 0)}
+            for w in watch_history
+        ]
+        
+        # Try to get profile insights for better recommendations
+        insights_cache = await db.user_insights_cache.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "top_genres": 1, "top_directors": 1, "top_actors": 1}
+        )
+        if insights_cache:
+            if not user_profile["top_genres"] and insights_cache.get("top_genres"):
+                user_profile["top_genres"] = [g["name"] for g in insights_cache["top_genres"][:3]]
+            if not user_profile["top_directors"] and insights_cache.get("top_directors"):
+                user_profile["top_directors"] = [d["name"] for d in insights_cache["top_directors"][:3]]
+            if not user_profile["top_actors"] and insights_cache.get("top_actors"):
+                user_profile["top_actors"] = [a["name"] for a in insights_cache["top_actors"][:3]]
+    
+    # Interpret vibe parameters
+    bp = vibe_request.brain_power
+    mood = vibe_request.mood
+    energy = vibe_request.energy
+    
+    vibe_description = []
+    if bp > 67:
+        vibe_description.append("complex, non-linear, mind-bending")
+    elif bp < 33:
+        vibe_description.append("easy to follow, passive viewing, background-friendly")
+    else:
+        vibe_description.append("moderately engaging")
+    
+    if mood > 67:
+        vibe_description.append("uplifting, joyful, feel-good")
+    elif mood < 33:
+        vibe_description.append("cathartic, melancholic, emotionally heavy")
+    else:
+        vibe_description.append("balanced emotional tone")
+    
+    if energy > 67:
+        vibe_description.append("fast-paced, high-stakes, action-packed")
+    elif energy < 33:
+        vibe_description.append("slow-burn, atmospheric, contemplative")
+    else:
+        vibe_description.append("moderate pacing")
+    
+    vibe_text = ", ".join(vibe_description)
+    
+    # Build search queries for web research
+    search_keywords = []
+    if bp > 67:
+        search_keywords.extend(["mind-bending movies", "complex narrative films"])
+    elif bp < 33:
+        search_keywords.extend(["comfort movies", "easy watching films"])
+    
+    if mood < 33:
+        search_keywords.append("cathartic movies reddit")
+    elif mood > 67:
+        search_keywords.append("feel-good movies letterboxd")
+    
+    if energy < 33:
+        search_keywords.append("slow burn atmospheric films")
+    elif energy > 67:
+        search_keywords.append("intense action thrillers")
+    
+    # Attempt web search for sentiment/recommendations
+    web_context = ""
+    try:
+        from emergentintegrations.tools.web_search import search_web
+        
+        search_query = " ".join(search_keywords[:2]) if search_keywords else "hidden gem movies"
+        search_results = await search_web(
+            api_key=EMERGENT_LLM_KEY,
+            query=f"{search_query} site:reddit.com OR site:letterboxd.com 2024 2025"
+        )
+        
+        if search_results and len(search_results) > 0:
+            web_context = f"\n\nWeb research findings:\n{search_results[:1500]}"
+    except Exception as e:
+        logging.warning(f"Web search failed, using LLM only: {e}")
+        web_context = ""
+    
+    # Build the prompt for LLM
+    watch_history_text = ""
+    if user_profile["watch_history"] and not vibe_request.include_rewatches:
+        watched_titles = [w["title"] for w in user_profile["watch_history"] if w["title"]]
+        if watched_titles:
+            watch_history_text = f"\n\nUser's watch history (EXCLUDE these titles): {', '.join(watched_titles[:30])}"
+    
+    profile_text = ""
+    if user_profile["top_genres"]:
+        profile_text += f"\nFavorite genres: {', '.join(user_profile['top_genres'])}"
+    if user_profile["top_directors"]:
+        profile_text += f"\nFavorite directors: {', '.join(user_profile['top_directors'])}"
+    if user_profile["top_actors"]:
+        profile_text += f"\nFavorite actors: {', '.join(user_profile['top_actors'])}"
+    
+    system_prompt = """You are an expert cinephile and movie recommendation engine. 
+Your task is to recommend 5 movies based on the user's current vibe and preferences.
+
+IMPORTANT GUIDELINES:
+1. Prioritize "hidden gems" - lesser-known films that match the vibe perfectly
+2. Focus on character-driven narratives and historically authentic films when appropriate
+3. Avoid generic mainstream blockbusters unless specifically required
+4. Each recommendation must have a compelling, personal reason that explains the vibe match
+5. All movies must be searchable on TMDB
+
+Return ONLY a valid JSON array with exactly 5 movies in this format:
+[
+  {"title": "Movie Name", "year": "YYYY", "reason": "Short vibe-match justification (max 20 words)"},
+  ...
+]"""
+
+    user_prompt = f"""Find 5 movies for this vibe: {vibe_text}
+
+Vibe Parameters:
+- Brain Power: {bp}/100 ({"high = complex/non-linear" if bp > 50 else "low = passive/light"})
+- Mood: {mood}/100 ({"high = uplifting" if mood > 50 else "low = cathartic"})
+- Energy: {energy}/100 ({"high = fast-paced" if energy > 50 else "low = slow-burn"})
+{profile_text}{watch_history_text}{web_context}
+
+Return 5 hidden gem movie recommendations as a JSON array. Focus on quality over popularity."""
+
+    try:
+        # Initialize LLM chat
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"vibe-rec-{user_id or 'anon'}-{int(time.time())}",
+            system_message=system_prompt
+        ).with_model("openai", "gpt-4o")
+        
+        user_message = UserMessage(text=user_prompt)
+        response = await chat.send_message(user_message)
+        
+        # Parse the JSON response
+        response_text = response.strip()
+        
+        # Extract JSON from response (handle markdown code blocks)
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        ai_recommendations = json.loads(response_text)
+        
+        if not isinstance(ai_recommendations, list) or len(ai_recommendations) == 0:
+            raise ValueError("Invalid AI response format")
+        
+    except Exception as e:
+        logging.error(f"AI recommendation failed: {e}")
+        # Fallback to basic TMDB discover with vibe parameters
+        return await fallback_vibe_recommendations(vibe_request, user_id)
+    
+    # Enrich recommendations with TMDB data
+    enriched_results = []
+    for rec in ai_recommendations[:5]:
+        title = rec.get("title", "")
+        year = rec.get("year", "")
+        reason = rec.get("reason", "")
+        
+        # Search TMDB for the movie
+        search_query = f"{title}"
+        if year:
+            search_query += f" {year}"
+        
+        search_data = tmdb_request("/search/movie", {"query": title, "year": year if year else None})
+        
+        if search_data and search_data.get("results"):
+            movie = search_data["results"][0]
+            
+            # Get full movie details
+            movie_details = tmdb_request(f"/movie/{movie['id']}")
+            
+            genre_ids = movie.get("genre_ids", [])
+            genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+            
+            enriched_results.append({
+                "id": movie.get("id"),
+                "title": movie.get("title", title),
+                "poster_path": movie.get("poster_path"),
+                "backdrop_path": movie.get("backdrop_path"),
+                "overview": movie.get("overview", ""),
+                "release_date": movie.get("release_date", ""),
+                "vote_average": movie.get("vote_average", 0),
+                "genres": genres if genres else (movie_details.get("genres", []) if movie_details else []),
+                "vibe_reason": reason,
+                "ai_recommended": True,
+                "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+                "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+            })
+    
+    # If we don't have enough results, pad with fallback
+    if len(enriched_results) < 3:
+        fallback = await fallback_vibe_recommendations(vibe_request, user_id)
+        for movie in fallback.get("results", []):
+            if len(enriched_results) < 5 and movie.get("id") not in [r.get("id") for r in enriched_results]:
+                movie["vibe_reason"] = movie.get("match_reason", "Matches your current vibe")
+                movie["ai_recommended"] = False
+                enriched_results.append(movie)
+    
+    return {
+        "results": enriched_results,
+        "vibe_description": vibe_text,
+        "ai_powered": True
+    }
+
+
+async def fallback_vibe_recommendations(vibe_request: AIVibeRequest, user_id: str = None) -> dict:
+    """Fallback to TMDB-based recommendations when AI fails"""
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    bp = vibe_request.brain_power
+    mood = vibe_request.mood
+    energy = vibe_request.energy
+    
+    # Map vibe to genres
+    genre_filter = []
+    
+    if mood < 33:
+        genre_filter.extend([18, 10749])  # Drama, Romance
+    elif mood > 67:
+        genre_filter.extend([35, 16])  # Comedy, Animation
+    
+    if energy > 67:
+        genre_filter.extend([28, 12, 53])  # Action, Adventure, Thriller
+    elif energy < 33:
+        genre_filter.extend([18, 99])  # Drama, Documentary
+    
+    if bp > 67:
+        genre_filter.extend([878, 9648, 53])  # Sci-Fi, Mystery, Thriller
+    
+    if not genre_filter:
+        genre_filter = [18, 35, 28]  # Default mix
+    
+    # Query TMDB
+    min_rating = 6.5 + (bp / 100) * 1.5
+    
+    unique_genres = list(set(genre_filter))[:3]
+    
+    discover_params = {
+        "sort_by": "vote_average.desc",
+        "vote_count.gte": 200,
+        "vote_average.gte": min_rating,
+        "with_genres": "|".join(str(g) for g in unique_genres)
+    }
+    
+    data = tmdb_request("/discover/movie", discover_params)
+    
+    if not data:
+        return {"results": [], "ai_powered": False}
+    
+    results = []
+    watched_ids = set()
+    
+    if user_id and not vibe_request.include_rewatches:
+        watch_history = await db.watch_history.find(
+            {"user_id": user_id},
+            {"_id": 0, "tmdb_id": 1}
+        ).to_list(100)
+        watched_ids = {w["tmdb_id"] for w in watch_history}
+    
+    for movie in data.get("results", [])[:20]:
+        if movie.get("id") in watched_ids:
+            continue
+        
+        genre_ids = movie.get("genre_ids", [])
+        genres = [GENRE_MAP.get(gid, "") for gid in genre_ids if gid in GENRE_MAP]
+        
+        results.append({
+            "id": movie.get("id"),
+            "title": movie.get("title", ""),
+            "poster_path": movie.get("poster_path"),
+            "backdrop_path": movie.get("backdrop_path"),
+            "overview": movie.get("overview", ""),
+            "release_date": movie.get("release_date", ""),
+            "vote_average": movie.get("vote_average", 0),
+            "genres": genres,
+            "match_reason": "Matches your vibe settings",
+            "ai_recommended": False,
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+        })
+        
+        if len(results) >= 5:
+            break
+    
+    return {"results": results, "ai_powered": False}
+
 
 @api_router.get("/movies/trending")
 async def get_trending_movies():
