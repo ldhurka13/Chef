@@ -86,6 +86,8 @@ Build a context-aware movie recommendation engine called "Chef" with:
   - `POST /api/game/choose` - Submit movie choice with reaction time
   - `POST /api/game/skip` - Skip round (0 points, fresh matchup)
   - `POST /api/game/cant-decide` - Equal points to both, keep King
+- **AI Vibe Recommendation:**
+  - `POST /api/movies/ai-vibe-recommendations` - AI-powered vibe-based recommendations with watch context
 
 ## DB Schema (MongoDB)
 - **auth_users**: {id, email, username, password_hash, birth_year, birth_date, avatar_url, favorite_genres, favorite_actors, favorite_movies, favorite_directors, streaming_services, location_permission, location, gender, bio, letterboxd_connected, letterboxd_count, created_at}
@@ -101,6 +103,14 @@ Build a context-aware movie recommendation engine called "Chef" with:
 - [x] 6-section navigation (Curated, Chef's Special, Swangy, Classics, Explore, Marathon)
 - [x] Floating bottom nav (Home, Vibe, Random, My Movies, Game)
 - [x] Vibe Console with mood/energy/brain power sliders
+- [x] **AI Vibe Recommendation Engine:**
+  - [x] LLM integration via Emergent Universal Key (GPT-4o)
+  - [x] Hybrid web search (Reddit/Letterboxd) with LLM fallback
+  - [x] Vibe sliders: Brain Power (0-100), Emotion (0-100), Energy (0-100)
+  - [x] Emotion interpretation: 0=Need a Cry (emotional/melancholic), 100=Need a Laugh (comedy/silly)
+  - [x] Watch Context selector: Solo, Date, Group
+  - [x] Returns 5 hidden gem recommendations with personalized vibe_reason explanations
+  - [x] Excludes watched movies when include_rewatches=false
 - [x] "Hangry Hail Mary" random picks modal
 - [x] **Movie Game (Eliminative Logic Discovery Engine):**
   - [x] Training Pool: ONLY movies from user's Watch History/Diary (seen films)
@@ -170,3 +180,11 @@ Build a context-aware movie recommendation engine called "Chef" with:
   - Recency Bias: Last 3 rounds weighted 1.3x, first 3 weighted 0.8x
   - Discovery Output: Top 3 unseen movies with "Why you'll like this" snippets
 - **Sort & Filter for My Movies**: Added sort (by date, rating, title, watch count) and filter (by source) to Diary and Watchlist tabs
+
+## Session Notes (June 2026)
+- **AI Vibe Recommendation Engine**: Complete implementation with:
+  - GPT-4o integration via Emergent Universal Key for hidden gem recommendations
+  - Corrected Emotion slider: 0=Need a Cry (emotional), 100=Need a Laugh (comedy)
+  - Watch Context selector: Solo (introspective), Date (romantic), Group (crowd-pleaser)
+  - Web search for Reddit/Letterboxd sentiment with LLM fallback
+  - Personalized vibe_reason explanations for each recommendation

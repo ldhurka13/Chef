@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Brain, Smile, Zap, RefreshCw, Sparkles, Loader2, Star, Film } from "lucide-react";
+import { X, Brain, Smile, Zap, RefreshCw, Sparkles, Loader2, Star, Film, User, Users, Heart } from "lucide-react";
 import { Switch } from "./ui/switch";
 import axios from "axios";
 import { toast } from "sonner";
@@ -8,6 +8,38 @@ import { toast } from "sonner";
 const API = process.env.REACT_APP_BACKEND_URL;
 const getToken = () => localStorage.getItem("chef_token");
 const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
+
+// Watch Context Selector Component
+const WatchContextSelector = ({ value, onChange }) => {
+  const options = [
+    { id: "solo", label: "Solo", icon: User, description: "Just me" },
+    { id: "date", label: "Date", icon: Heart, description: "Romantic" },
+    { id: "group", label: "Group", icon: Users, description: "Friends" },
+  ];
+
+  return (
+    <div className="flex justify-center gap-3">
+      {options.map(({ id, label, icon: Icon, description }) => (
+        <motion.button
+          key={id}
+          onClick={() => onChange(id)}
+          className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all
+            ${value === id 
+              ? "bg-chef-teal/10 border-chef-teal/40 text-chef-teal" 
+              : "bg-chef-surface/40 border-white/10 text-chef-muted hover:border-white/20 hover:text-chef-platinum"
+            }`}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          data-testid={`watch-context-${id}`}
+        >
+          <Icon className="w-5 h-5" strokeWidth={1.5} />
+          <span className="text-sm font-medium">{label}</span>
+          <span className="text-[10px] opacity-60">{description}</span>
+        </motion.button>
+      ))}
+    </div>
+  );
+};
 
 const VerticalSlider = ({ value, onChange, label, icon: Icon, lowLabel, highLabel, color }) => {
   return (
@@ -76,14 +108,14 @@ const VerticalSlider = ({ value, onChange, label, icon: Icon, lowLabel, highLabe
 };
 
 const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
-  const [localParams, setLocalParams] = useState(params);
+  const [localParams, setLocalParams] = useState({...params, watch_context: params.watch_context || "solo"});
   const [aiMode, setAiMode] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResults, setAiResults] = useState([]);
   const [vibeDescription, setVibeDescription] = useState("");
   
   useEffect(() => {
-    setLocalParams(params);
+    setLocalParams({...params, watch_context: params.watch_context || "solo"});
   }, [params]);
 
   useEffect(() => {
@@ -104,6 +136,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
       mood: 50,
       energy: 50,
       include_rewatches: false,
+      watch_context: "solo",
     };
     setLocalParams(defaultParams);
     setAiResults([]);
@@ -291,8 +324,17 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
                   />
                 </div>
 
+                {/* Watch Context */}
+                <div className="mb-6">
+                  <p className="text-center text-sm text-chef-muted mb-4">Who's watching?</p>
+                  <WatchContextSelector
+                    value={localParams.watch_context}
+                    onChange={(val) => setLocalParams({ ...localParams, watch_context: val })}
+                  />
+                </div>
+
                 {/* Rewatches Toggle */}
-                <div className="flex items-center justify-center gap-4 mb-8">
+                <div className="flex items-center justify-center gap-4 mb-6">
                   <span className="text-chef-muted">Include Rewatches</span>
                   <Switch
                     checked={localParams.include_rewatches}
