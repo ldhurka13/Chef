@@ -18,12 +18,12 @@ const WatchContextSelector = ({ value, onChange }) => {
   ];
 
   return (
-    <div className="flex justify-center gap-3">
+    <div className="flex justify-center gap-2">
       {options.map(({ id, label, icon: Icon, description }) => (
         <motion.button
           key={id}
           onClick={() => onChange(id)}
-          className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border transition-all
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all
             ${value === id 
               ? "bg-chef-teal/10 border-chef-teal/40 text-chef-teal" 
               : "bg-chef-surface/40 border-white/10 text-chef-muted hover:border-white/20 hover:text-chef-platinum"
@@ -32,9 +32,8 @@ const WatchContextSelector = ({ value, onChange }) => {
           whileTap={{ scale: 0.98 }}
           data-testid={`watch-context-${id}`}
         >
-          <Icon className="w-5 h-5" strokeWidth={1.5} />
+          <Icon className="w-4 h-4" strokeWidth={1.5} />
           <span className="text-sm font-medium">{label}</span>
-          <span className="text-[10px] opacity-60">{description}</span>
         </motion.button>
       ))}
     </div>
@@ -238,7 +237,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
-          className="fixed inset-0 z-[60] flex items-center justify-center"
+          className="fixed inset-0 z-[60] flex items-center justify-center py-8 md:py-12"
           onClick={() => onOpenChange(false)}
         >
           {/* Backdrop */}
@@ -250,9 +249,9 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className="relative w-full max-w-3xl mx-4 p-8 md:p-12 rounded-3xl
+            className="relative w-full max-w-3xl mx-4 p-6 md:p-10 rounded-2xl
                        bg-chef-surface/90 backdrop-blur-xl border border-white/10
-                       shadow-cinematic"
+                       shadow-cinematic max-h-[calc(100vh-4rem)] md:max-h-[calc(100vh-6rem)] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
             data-testid="vibe-console-modal"
           >
@@ -308,8 +307,8 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
                     onChange={(val) => setLocalParams({ ...localParams, mood: val })}
                     label="Emotion"
                     icon={Smile}
-                    lowLabel="Need a Cry"
-                    highLabel="Need a Laugh"
+                    lowLabel="Serious"
+                    highLabel="Fun"
                     color="text-chef-gold"
                   />
                   
@@ -319,7 +318,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange }) => {
                     label="Energy"
                     icon={Zap}
                     lowLabel="Exhausted"
-                    highLabel="Locked In"
+                    highLabel="LFG"
                     color="text-chef-orange"
                   />
                 </div>

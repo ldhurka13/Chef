@@ -3647,29 +3647,46 @@ async def get_ai_vibe_recommendations(
     
     vibe_description = []
     
-    # Brain Power interpretation
-    if bp > 67:
-        vibe_description.append("complex, thought-provoking, intellectually stimulating")
-    elif bp < 33:
-        vibe_description.append("easy to follow, background-friendly, no-brainer")
+    # ========== BRAIN POWER INTERPRETATION ==========
+    # Controls complexity: runtime, plot complexity, number of characters, storytelling style
+    if bp > 80:
+        vibe_description.append("highly complex, non-linear storytelling, dense context, requires full attention")
+    elif bp > 60:
+        vibe_description.append("thought-provoking, intricate plot, layered narrative")
+    elif bp < 20:
+        vibe_description.append("very simple, background-friendly, minimal plot, can zone out")
+    elif bp < 40:
+        vibe_description.append("easy to follow, straightforward story, light viewing")
     else:
-        vibe_description.append("moderately engaging")
+        vibe_description.append("moderately engaging, balanced complexity")
     
-    # Mood interpretation (CORRECTED: high = comedy, low = emotional)
-    if mood > 67:
-        vibe_description.append("funny, comedic, laugh-out-loud, silly")
-    elif mood < 33:
-        vibe_description.append("emotional, melancholic, touching, tearjerker")
+    # ========== EMOTION INTERPRETATION ==========
+    # High = Fun (funny, goofy, silly, induces laughter)
+    # Low = Serious (serious topics, non-fiction, melancholic)
+    if mood > 80:
+        vibe_description.append("very funny, goofy, silly, absurdist humor, laugh-out-loud")
+    elif mood > 60:
+        vibe_description.append("comedic, lighthearted, witty, amusing")
+    elif mood < 20:
+        vibe_description.append("very serious, heavy themes, documentary-like, melancholic")
+    elif mood < 40:
+        vibe_description.append("serious tone, dramatic, thoughtful, introspective")
     else:
-        vibe_description.append("balanced emotional tone")
+        vibe_description.append("balanced tone, mix of light and serious")
     
-    # Energy interpretation
-    if energy > 67:
-        vibe_description.append("fast-paced, high-energy, action-packed")
-    elif energy < 33:
-        vibe_description.append("slow-burn, relaxing, atmospheric, chill")
+    # ========== ENERGY INTERPRETATION ==========
+    # High = LFG (loud, vibrant, engaging, high-octane)
+    # Low = Exhausted (feel-good, uplifting, low stress, calming)
+    if energy > 80:
+        vibe_description.append("high-octane, intense, loud, vibrant, adrenaline-pumping")
+    elif energy > 60:
+        vibe_description.append("energetic, engaging, dynamic pacing")
+    elif energy < 20:
+        vibe_description.append("very calming, feel-good, cozy, gentle, low-stress")
+    elif energy < 40:
+        vibe_description.append("relaxing, uplifting, soothing, peaceful vibes")
     else:
-        vibe_description.append("moderate pacing")
+        vibe_description.append("moderate energy, balanced pacing")
     
     # Watch context
     context_descriptions = {
@@ -3681,36 +3698,72 @@ async def get_ai_vibe_recommendations(
     
     vibe_text = ", ".join([v for v in vibe_description if v])
     
+    # ========== VIBE INTERSECTIONS ==========
+    # Generate specific intersection descriptions for the AI
+    intersection_notes = []
+    
+    # High Brain Power + Low Emotion (Serious) = Complex contemplative cinema
+    if bp > 60 and mood < 40:
+        intersection_notes.append("COMPLEX + SERIOUS: Think contemplative arthouse, philosophical dramas, cerebral thrillers")
+    
+    # Low Brain Power + High Emotion (Fun) = Easy slapstick comedy
+    if bp < 40 and mood > 60:
+        intersection_notes.append("SIMPLE + FUN: Classic slapstick, silly comedies, absurdist humor that doesn't require thinking")
+    
+    # Low Brain Power + Low Energy = Ultimate background/comfort viewing
+    if bp < 40 and energy < 40:
+        intersection_notes.append("EASY + CHILL: Perfect background movies, comfort films, can fall asleep to")
+    
+    # High Energy + High Emotion = Wild fun action comedies
+    if energy > 60 and mood > 60:
+        intersection_notes.append("HIGH ENERGY + FUN: Buddy comedies, action comedies, wild rides with lots of laughs")
+    
+    # High Energy + Low Emotion = Intense serious dramas/thrillers
+    if energy > 60 and mood < 40:
+        intersection_notes.append("HIGH ENERGY + SERIOUS: Gripping thrillers, intense dramas, edge-of-seat suspense")
+    
+    # Low Energy + Low Emotion = Melancholic slow cinema
+    if energy < 40 and mood < 40:
+        intersection_notes.append("CHILL + SERIOUS: Melancholic character studies, slow cinema, meditative dramas")
+    
+    # Low Energy + High Emotion = Feel-good comfort comedies
+    if energy < 40 and mood > 60:
+        intersection_notes.append("CHILL + FUN: Feel-good comedies, heartwarming humor, cozy funny films")
+    
+    # High Brain Power + High Energy + Serious = Mind-bending thrillers
+    if bp > 60 and energy > 60 and mood < 40:
+        intersection_notes.append("COMPLEX + INTENSE + SERIOUS: Mind-bending thrillers, psychological intensity, requires focus")
+    
     # Build search queries for web research
     search_keywords = []
     
     # Brain power keywords
-    if bp > 67:
-        search_keywords.extend(["mind-bending movies", "complex narrative films", "intellectual cinema"])
-    elif bp < 33:
-        search_keywords.extend(["comfort movies", "easy watching films", "background movies"])
+    if bp > 60:
+        search_keywords.extend(["complex narrative films", "non-linear storytelling movies", "cerebral cinema"])
+    elif bp < 40:
+        search_keywords.extend(["easy watching films", "simple plot movies", "background movies reddit"])
     
-    # Mood keywords (CORRECTED)
-    if mood > 67:
-        search_keywords.extend(["best comedies", "funny movies reddit", "hilarious films"])
-        if bp < 33 and energy < 50:
-            search_keywords.append("slapstick comedy easy watch")
-    elif mood < 33:
-        search_keywords.extend(["emotional movies", "tearjerker films", "melancholic cinema"])
-        if bp > 67 and energy > 50:
-            search_keywords.append("complex contemplative emotional films")
+    # Emotion keywords
+    if mood > 60:
+        search_keywords.extend(["funniest movies", "comedy gems reddit", "hilarious films"])
+        if bp < 40:
+            search_keywords.append("dumb comedies easy watch slapstick")
+    elif mood < 40:
+        search_keywords.extend(["serious films", "dramatic movies", "melancholic cinema letterboxd"])
+        if bp > 60:
+            search_keywords.append("philosophical complex dramas")
     
     # Energy keywords
-    if energy < 33:
-        search_keywords.append("slow burn atmospheric films")
-    elif energy > 67:
-        search_keywords.append("intense action thrillers high energy")
+    if energy > 60:
+        search_keywords.extend(["high energy films", "intense movies", "adrenaline movies"])
+    elif energy < 40:
+        search_keywords.extend(["calming movies", "feel good films", "cozy movies reddit"])
     
     # Watch context keywords
     if watch_context == "date":
-        search_keywords.append("romantic movies date night")
+        search_keywords.append("date night movies romantic")
     elif watch_context == "group":
-        search_keywords.append("crowd pleaser movies group watch")
+        search_keywords.append("crowd pleaser movies group watch party")
     
     # Attempt web search for sentiment/recommendations
     web_context = ""
@@ -3747,27 +3800,44 @@ async def get_ai_vibe_recommendations(
     system_prompt = """You are an expert cinephile and movie recommendation engine. 
 Your task is to recommend 5 movies based on the user's current vibe, watch context, and preferences.
 
-VIBE INTERPRETATION:
-- Brain Power: 0=Zoned Out (passive, easy watching), 100=Deep Focus (complex, challenging)
-- Mood: 0=Need a Cry (emotional, touching, melancholic), 100=Need a Laugh (comedy, funny, silly)
-- Energy: 0=Exhausted (slow, relaxing, chill), 100=Hyped (fast-paced, intense, action)
+VIBE PARAMETER INTERPRETATION:
+
+BRAIN POWER (0-100): Controls movie complexity
+- 0-30 (Zoned Out): Simple plots, can be played in background, minimal concentration needed, easy to follow
+- 30-60: Moderately engaging, straightforward but interesting
+- 60-100 (Deep Focus): Complex plots, non-linear storytelling, longer runtime, dense context, multiple characters, requires full attention
+
+EMOTION (0-100): Controls mood/tone of the film  
+- 0-30 (Serious): Heavy themes, documentary-like, melancholic, dramatic, thought-provoking, possibly non-fiction
+- 30-60: Balanced tone, dramedy, mix of light and serious
+- 60-100 (Fun): Funny, goofy, silly, absurdist, might not make complete sense, induces laughter, comedic
+
+ENERGY (0-100): Controls intensity/vibe of the film
+- 0-30 (Exhausted): Feel-good, uplifting, calming, cozy, low-stress, soothing, gentle pace
+- 30-60: Moderate pacing, balanced energy
+- 60-100 (LFG): Loud, vibrant, engaging, high-octane, intense, adrenaline-pumping
 
 WATCH CONTEXT:
-- Solo: introspective, personal favorites, cult classics
+- Solo: introspective, personal favorites, cult classics, can be niche
 - Date: romantic undertones, engaging but not alienating, conversation starters
 - Group: crowd-pleasers, universally appealing, generates discussion or laughs
 
-IMPORTANT GUIDELINES:
-1. Prioritize "hidden gems" - lesser-known films that match the vibe perfectly
-2. For high Mood (comedy): recommend genuinely funny films, not just "feel-good"
-3. For low Mood (emotional): recommend moving, cathartic films that earn their emotions
-4. For low Brain Power + high Mood: classic slapstick, silly comedies, easy laughs
-5. For high Brain Power + low Mood: complex contemplative emotional cinema
-6. Match the watch context appropriately
-7. Each recommendation must have a compelling reason that explains the vibe match
-8. All movies must be searchable on TMDB
+IMPORTANT VIBE INTERSECTIONS:
+- Low Brain + High Emotion = Easy slapstick comedies, no-brain funny films
+- High Brain + Low Emotion = Complex contemplative dramas, philosophical cinema
+- Low Energy + High Emotion = Cozy feel-good comedies, heartwarming humor
+- High Energy + Low Emotion = Gripping thrillers, intense dramas
+- Low Brain + Low Energy = Perfect background/comfort films, can fall asleep to
+- High Brain + High Energy + High Emotion = Wild clever comedies, inventive fun
 
-Return ONLY a valid JSON array with exactly 5 movies in this format:
+GUIDELINES:
+1. Prioritize "hidden gems" over mainstream blockbusters
+2. Match ALL THREE vibe parameters, not just one
+3. Consider the intersections - they define the specific mood
+4. Each recommendation needs a specific reason tied to the vibe
+5. All movies must be searchable on TMDB
+
+Return ONLY a valid JSON array with exactly 5 movies:
 [
   {"title": "Movie Name", "year": "YYYY", "reason": "Short vibe-match justification (max 20 words)"},
   ...
@@ -3779,23 +3849,25 @@ Return ONLY a valid JSON array with exactly 5 movies in this format:
         "group": "GROUP WATCH - recommend crowd-pleasers that everyone can enjoy"
     }.get(watch_context, "")
 
+    # Build intersection notes for the prompt
+    intersection_text = "\n".join(intersection_notes) if intersection_notes else ""
+
     user_prompt = f"""Find 5 movies for this vibe: {vibe_text}
 
-Vibe Parameters:
-- Brain Power: {bp}/100 ({"complex, challenging" if bp > 50 else "easy, passive"})
-- Mood: {mood}/100 ({"COMEDY - need laughs, funny" if mood > 50 else "EMOTIONAL - need catharsis, touching"})
-- Energy: {energy}/100 ({"high-energy, fast-paced" if energy > 50 else "chill, slow-burn, relaxing"})
+VIBE PARAMETERS:
+- Brain Power: {bp}/100 → {"COMPLEX (non-linear, dense, long runtime, needs concentration)" if bp > 60 else "SIMPLE (easy to follow, background-friendly)" if bp < 40 else "MODERATE complexity"}
+- Emotion: {mood}/100 → {"FUN (funny, goofy, silly, comedic)" if mood > 60 else "SERIOUS (dramatic, melancholic, heavy themes)" if mood < 40 else "BALANCED tone"}
+- Energy: {energy}/100 → {"LFG! (loud, vibrant, intense, high-octane)" if energy > 60 else "CHILL (feel-good, calming, low-stress, cozy)" if energy < 40 else "MODERATE energy"}
 
 Watch Context: {watch_context_text}
-{profile_text}{watch_history_text}{web_context}
+{profile_text}{watch_history_text}
 
-SPECIFIC VIBE NOTES:
-{f"- User wants EASY COMEDIES - think classic slapstick, silly humor, background-friendly laughs" if mood > 67 and bp < 33 else ""}
-{f"- User wants COMPLEX EMOTIONAL films - think contemplative, melancholic, intellectually engaging drama" if mood < 33 and bp > 67 else ""}
-{f"- User is EXHAUSTED - prioritize relaxing, low-effort viewing" if energy < 33 else ""}
-{f"- User is HYPED - prioritize energetic, engaging content" if energy > 67 else ""}
+{f"VIBE INTERSECTION ANALYSIS:{chr(10)}{intersection_text}" if intersection_text else ""}
+{web_context}
 
-Return 5 hidden gem movie recommendations as a JSON array. Match the vibe precisely."""
+Remember: Match ALL vibe parameters together. The intersection of Brain Power + Emotion + Energy defines the specific type of film needed.
+
+Return 5 hidden gem movie recommendations as a JSON array."""
 
     try:
         # Initialize LLM chat
