@@ -113,6 +113,7 @@ class WatchHistoryCreate(BaseModel):
     watched_date: Optional[str] = None
     title: str = ""
     poster_path: Optional[str] = None
+    comment: Optional[str] = None
 
 class WatchHistoryUpdate(BaseModel):
     user_rating: Optional[float] = Field(default=None, ge=0, le=10)
@@ -1508,6 +1509,7 @@ async def search_tmdb_movies(query: str):
                     "id": movie["id"],
                     "title": title,
                     "year": year,
+                    "poster_path": movie.get("poster_path"),
                     "poster_url": get_image_url(movie.get("poster_path"), "w185"),
                     "rating": round(movie.get("vote_average", 0), 1),
                     "source": "tmdb"
@@ -1519,6 +1521,7 @@ async def search_tmdb_movies(query: str):
             data = tmdb_request("/search/movie", {"query": r["title"], "year": r.get("year"), "language": "en-US", "page": 1})
             if data and data.get("results"):
                 tmdb_match = data["results"][0]
+                r["poster_path"] = tmdb_match.get("poster_path")
                 r["poster_url"] = get_image_url(tmdb_match.get("poster_path"), "w185")
                 if not isinstance(r["id"], int):
                     r["id"] = tmdb_match["id"]
@@ -1560,7 +1563,7 @@ async def get_watch_history(current_user: dict = Depends(get_current_user)):
         {"_id": 0}
     ).sort("last_watched_date", -1).to_list(500)
     
-    # Auto-migrate: ensure every doc has a `watches` array
+    # Auto-migrate: ensure every doc has a `watches` array and poster_url
     for doc in history:
         if "watches" not in doc:
             watches = []
@@ -1586,6 +1589,10 @@ async def get_watch_history(current_user: dict = Depends(get_current_user)):
                 {"user_id": current_user["id"], "tmdb_id": doc["tmdb_id"]},
                 {"$set": {"watches": watches}}
             )
+        
+        # Add poster_url from poster_path if available
+        if doc.get("poster_path") and not doc.get("poster_url"):
+            doc["poster_url"] = get_image_url(doc["poster_path"], "w500")
     
     return history
 
@@ -1600,7 +1607,7 @@ async def add_to_watch_history(item: WatchHistoryCreate, current_user: dict = De
         "id": str(uuid.uuid4()),
         "rating": item.user_rating,
         "date": watched_date,
-        "comment": ""
+        "comment": item.comment or ""
     }
     
     # Check if already in history
@@ -2079,6 +2086,11 @@ async def get_watchlist(current_user: dict = Depends(get_current_user)):
         {"_id": 0}
     ).sort("added_at", -1).to_list(500)
     
+    # Add poster_url from poster_path if available
+    for item in items:
+        if item.get("poster_path") and not item.get("poster_url"):
+            item["poster_url"] = get_image_url(item["poster_path"], "w500")
+    
     return items
 
 @api_router.post("/user/watchlist")
@@ -2350,7 +2362,9 @@ async def get_curated_for_you(current_user: dict = Depends(get_current_user)):
             "id": tmdb_id,
             "title": movie.get("title", ""),
             "poster_path": movie.get("poster_path"),
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
             "backdrop_path": movie.get("backdrop_path"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
             "overview": movie.get("overview", ""),
             "release_date": movie.get("release_date", ""),
             "vote_average": vote_avg,
@@ -2620,7 +2634,9 @@ async def get_explore_for_you(current_user: dict = Depends(get_current_user)):
             "id": tmdb_id,
             "title": movie.get("title", ""),
             "poster_path": movie.get("poster_path"),
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
             "backdrop_path": movie.get("backdrop_path"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
             "overview": movie.get("overview", ""),
             "release_date": movie.get("release_date", ""),
             "vote_average": vote_avg,

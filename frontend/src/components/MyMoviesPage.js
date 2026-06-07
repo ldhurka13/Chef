@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Plus, Check, Film, Loader2, Trash2, Calendar, Star, X,
   BookOpen, Bookmark, User, Clapperboard, Users, Heart, MessageSquare, Pencil, RotateCcw, AlertTriangle,
-  ArrowUpDown, SlidersHorizontal, ChevronDown, Filter
+  ArrowUpDown, SlidersHorizontal, ChevronDown, Filter, LayoutGrid, List, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -77,6 +77,141 @@ const SortFilterDropdown = ({ label, icon: Icon, value, options, onChange, testI
   );
 };
 
+// ========== CALENDAR VIEW COMPONENT ==========
+const CalendarView = ({ moviesByMonth, onMovieClick, onMovieRemove }) => {
+  const scrollRef = useRef(null);
+  const [visibleStartIndex, setVisibleStartIndex] = useState(0);
+  const monthsToShow = 3;
+  
+  // Get visible months (show 3 at a time, starting from newest)
+  const visibleMonths = moviesByMonth.slice(visibleStartIndex, visibleStartIndex + monthsToShow);
+  const canScrollLeft = visibleStartIndex > 0;
+  const canScrollRight = visibleStartIndex + monthsToShow < moviesByMonth.length;
+  
+  const scrollLeft = () => {
+    if (canScrollLeft) setVisibleStartIndex(prev => Math.max(0, prev - 1));
+  };
+  
+  const scrollRight = () => {
+    if (canScrollRight) setVisibleStartIndex(prev => Math.min(moviesByMonth.length - monthsToShow, prev + 1));
+  };
+  
+  const formatMonth = (monthKey) => {
+    const [year, month] = monthKey.split("-");
+    const date = new Date(year, parseInt(month) - 1);
+    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+  
+  return (
+    <div className="relative">
+      {/* Navigation Arrows */}
+      <div className="flex items-center justify-between mb-4">
+        <button
+          onClick={scrollLeft}
+          disabled={!canScrollLeft}
+          className={`p-2 rounded-lg transition-colors ${canScrollLeft ? "bg-chef-surface/60 text-chef-platinum hover:bg-white/10" : "text-chef-muted/20 cursor-not-allowed"}`}
+          data-testid="calendar-scroll-left"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <span className="text-xs text-chef-muted">Your Film Timeline</span>
+        <button
+          onClick={scrollRight}
+          disabled={!canScrollRight}
+          className={`p-2 rounded-lg transition-colors ${canScrollRight ? "bg-chef-surface/60 text-chef-platinum hover:bg-white/10" : "text-chef-muted/20 cursor-not-allowed"}`}
+          data-testid="calendar-scroll-right"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+      
+      {/* Month Columns */}
+      <div className="grid grid-cols-3 gap-4" ref={scrollRef}>
+        {visibleMonths.map(({ month, movies }) => (
+          <div key={month} className="bg-chef-surface/30 rounded-xl border border-white/5 p-4">
+            {/* Month Header */}
+            <div className="text-center mb-4 pb-3 border-b border-white/5">
+              <h3 className="font-serif text-lg text-chef-platinum">{formatMonth(month)}</h3>
+              <p className="text-xs text-chef-muted">{movies.length} movie{movies.length !== 1 ? "s" : ""}</p>
+            </div>
+            
+            {/* Movie Cards */}
+            <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+              {movies.map((movie) => {
+                const posterUrl = movie.poster_url || (movie.poster_path ? `https://image.tmdb.org/t/p/w185${movie.poster_path}` : null);
+                const latestWatch = movie.watches?.[0];
+                
+                return (
+                  <motion.div
+                    key={movie.tmdb_id}
+                    className="relative group cursor-pointer"
+                    onClick={() => onMovieClick(movie)}
+                    whileHover={{ scale: 1.02 }}
+                    data-testid={`calendar-movie-${movie.tmdb_id}`}
+                  >
+                    <div className="aspect-[2/3] rounded-lg overflow-hidden relative">
+                      {posterUrl ? (
+                        <img src={posterUrl} alt={movie.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-chef-bg flex items-center justify-center">
+                          <Film className="w-8 h-8 text-chef-muted/20" />
+                        </div>
+                      )}
+                      
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                          <p className="text-sm text-chef-platinum font-medium truncate">{movie.title}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="flex items-center gap-1 text-xs text-chef-gold">
+                              <Star className="w-3 h-3" fill="currentColor" />
+                              {(latestWatch?.rating || movie.user_rating || 0).toFixed(1)}
+                            </span>
+                            {movie.watch_count > 1 && (
+                              <span className="text-xs text-chef-muted">{movie.watch_count}x</span>
+                            )}
+                          </div>
+                          {latestWatch?.comment && (
+                            <p className="text-xs text-chef-muted/80 mt-2 line-clamp-2 italic">
+                              &ldquo;{latestWatch.comment}&rdquo;
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Rating Badge (always visible) */}
+                      <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm">
+                        <span className="flex items-center gap-0.5 text-xs text-chef-gold">
+                          <Star className="w-2.5 h-2.5" fill="currentColor" />
+                          {(latestWatch?.rating || movie.user_rating || 0).toFixed(1)}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Timeline Indicator */}
+      <div className="flex items-center justify-center mt-6 gap-1">
+        {moviesByMonth.map((_, idx) => (
+          <div
+            key={idx}
+            className={`w-2 h-2 rounded-full transition-colors ${
+              idx >= visibleStartIndex && idx < visibleStartIndex + monthsToShow
+                ? "bg-chef-teal"
+                : "bg-white/10"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ========== DIARY DETAIL MODAL ==========
 const DiaryDetailModal = ({ movie, onClose, onMovieUpdated, onMovieRemoved }) => {
   const [watches, setWatches] = useState([]);
@@ -111,7 +246,9 @@ const DiaryDetailModal = ({ movie, onClose, onMovieUpdated, onMovieRemoved }) =>
         onMovieRemoved(movie.tmdb_id);
         onClose();
       }
-    } catch {}
+    } catch (err) {
+      // Handle silently
+    }
   };
 
   const handleAddWatch = async () => {
@@ -430,7 +567,7 @@ const DiaryDetailModal = ({ movie, onClose, onMovieUpdated, onMovieRemoved }) =>
 };
 
 // ========== DIARY TAB ==========
-const DiaryTab = () => {
+const DiaryTab = ({ onMovieClick }) => {
   const debounceRef = useRef(null);
   const [watchHistory, setWatchHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -440,13 +577,17 @@ const DiaryTab = () => {
   const [addingMovie, setAddingMovie] = useState(null);
   const [addRating, setAddRating] = useState(7.0);
   const [addDate, setAddDate] = useState(new Date().toISOString().split("T")[0]);
+  const [addComment, setAddComment] = useState("");
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [viewMode, setViewMode] = useState("list"); // "list" or "calendar"
   
   // Sort & Filter state
   const [sortBy, setSortBy] = useState("date_desc");
-  const [filterSource, setFilterSource] = useState("all");
+  const [filterGenre, setFilterGenre] = useState("all");
+  const [filterDecade, setFilterDecade] = useState("all");
+  const [filterRating, setFilterRating] = useState("all");
 
   const SORT_OPTIONS = [
     { value: "date_desc", label: "Newest First" },
@@ -458,10 +599,40 @@ const DiaryTab = () => {
     { value: "watches_desc", label: "Most Watched" },
   ];
 
-  const FILTER_OPTIONS = [
-    { value: "all", label: "All Sources" },
-    { value: "manual", label: "Manual" },
-    { value: "letterboxd", label: "Letterboxd" },
+  const GENRE_OPTIONS = [
+    { value: "all", label: "All Genres" },
+    { value: "Action", label: "Action" },
+    { value: "Adventure", label: "Adventure" },
+    { value: "Animation", label: "Animation" },
+    { value: "Comedy", label: "Comedy" },
+    { value: "Crime", label: "Crime" },
+    { value: "Documentary", label: "Documentary" },
+    { value: "Drama", label: "Drama" },
+    { value: "Family", label: "Family" },
+    { value: "Fantasy", label: "Fantasy" },
+    { value: "Horror", label: "Horror" },
+    { value: "Romance", label: "Romance" },
+    { value: "Sci-Fi", label: "Sci-Fi" },
+    { value: "Thriller", label: "Thriller" },
+  ];
+
+  const DECADE_OPTIONS = [
+    { value: "all", label: "All Decades" },
+    { value: "2020", label: "2020s" },
+    { value: "2010", label: "2010s" },
+    { value: "2000", label: "2000s" },
+    { value: "1990", label: "1990s" },
+    { value: "1980", label: "1980s" },
+    { value: "1970", label: "1970s & Earlier" },
+  ];
+
+  const RATING_OPTIONS = [
+    { value: "all", label: "All Ratings" },
+    { value: "9", label: "9+ (Masterpiece)" },
+    { value: "8", label: "8+ (Great)" },
+    { value: "7", label: "7+ (Good)" },
+    { value: "6", label: "6+ (Decent)" },
+    { value: "5", label: "Below 6" },
   ];
 
   useEffect(() => { fetchHistory(); }, []);
@@ -473,7 +644,9 @@ const DiaryTab = () => {
     try {
       const res = await axios.get(`${API}/user/watch-history`, { headers: authHeaders() });
       setWatchHistory(res.data || []);
-    } catch {} finally { setLoading(false); }
+    } catch (err) {
+      // Handle silently
+    } finally { setLoading(false); }
   };
 
   const handleSearch = useCallback((q) => {
@@ -494,6 +667,7 @@ const DiaryTab = () => {
     setAddingMovie(movie);
     setAddRating(7.0);
     setAddDate(new Date().toISOString().split("T")[0]);
+    setAddComment("");
     setQuery("");
     setResults([]);
   };
@@ -501,15 +675,21 @@ const DiaryTab = () => {
   const handleAdd = async () => {
     if (!addingMovie) return;
     try {
+      // Use poster_path if available, otherwise extract from poster_url
+      const posterPath = addingMovie.poster_path || 
+        (addingMovie.poster_url ? addingMovie.poster_url.replace("https://image.tmdb.org/t/p/w185", "").replace("https://image.tmdb.org/t/p/w500", "") : null);
+      
       await axios.post(`${API}/user/watch-history`, {
         tmdb_id: addingMovie.id,
         user_rating: addRating,
         watched_date: addDate,
         title: addingMovie.title,
-        poster_path: addingMovie.poster_url ? addingMovie.poster_url.split("/").pop() : null,
+        poster_path: posterPath,
+        comment: addComment,
       }, { headers: authHeaders() });
       toast.success(`Added "${addingMovie.title}"`);
       setAddingMovie(null);
+      setAddComment("");
       fetchHistory();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to add");
@@ -544,11 +724,40 @@ const DiaryTab = () => {
   const getProcessedHistory = () => {
     let filtered = [...watchHistory];
     
-    // Filter by source
-    if (filterSource !== "all") {
-      filtered = filtered.filter((item) => 
-        filterSource === "letterboxd" ? item.source === "letterboxd" : item.source !== "letterboxd"
-      );
+    // Filter by genre
+    if (filterGenre !== "all") {
+      filtered = filtered.filter((item) => {
+        const genres = item.genres || [];
+        return genres.some(g => {
+          const genreName = typeof g === 'string' ? g : g?.name;
+          return genreName?.toLowerCase().includes(filterGenre.toLowerCase());
+        });
+      });
+    }
+    
+    // Filter by decade
+    if (filterDecade !== "all") {
+      filtered = filtered.filter((item) => {
+        const date = item.last_watched_date || "";
+        const year = parseInt(date.substring(0, 4)) || 0;
+        // Get release year from the movie if available
+        const releaseYear = item.release_year || year;
+        if (filterDecade === "1970") {
+          return releaseYear < 1980;
+        }
+        const decadeStart = parseInt(filterDecade);
+        return releaseYear >= decadeStart && releaseYear < decadeStart + 10;
+      });
+    }
+    
+    // Filter by rating
+    if (filterRating !== "all") {
+      const minRating = parseInt(filterRating);
+      if (minRating === 5) {
+        filtered = filtered.filter((item) => (item.user_rating || 0) < 6);
+      } else {
+        filtered = filtered.filter((item) => (item.user_rating || 0) >= minRating);
+      }
     }
     
     // Sort
@@ -576,14 +785,35 @@ const DiaryTab = () => {
     return filtered;
   };
 
+  // Group movies by month for calendar view
+  const getMoviesByMonth = () => {
+    const moviesByMonth = {};
+    watchHistory.forEach(item => {
+      const date = item.last_watched_date || "";
+      if (date) {
+        const monthKey = date.substring(0, 7); // YYYY-MM
+        if (!moviesByMonth[monthKey]) {
+          moviesByMonth[monthKey] = [];
+        }
+        moviesByMonth[monthKey].push(item);
+      }
+    });
+    // Sort months descending (newest first)
+    return Object.entries(moviesByMonth)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([month, movies]) => ({ month, movies }));
+  };
+
   const processedHistory = getProcessedHistory();
+  const moviesByMonth = getMoviesByMonth();
+  const hasActiveFilters = filterGenre !== "all" || filterDecade !== "all" || filterRating !== "all";
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-chef-muted">
           {processedHistory.length} movie{processedHistory.length !== 1 ? "s" : ""} 
-          {filterSource !== "all" && ` (filtered from ${watchHistory.length})`}
+          {hasActiveFilters && ` (filtered from ${watchHistory.length})`}
         </p>
         {watchHistory.length > 0 && (
           <button
@@ -597,9 +827,9 @@ const DiaryTab = () => {
         )}
       </div>
 
-      {/* Sort & Filter Controls */}
+      {/* Sort, Filter & View Controls */}
       {watchHistory.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap items-center gap-2 mb-6">
           <SortFilterDropdown
             label="Sort"
             icon={ArrowUpDown}
@@ -609,13 +839,49 @@ const DiaryTab = () => {
             testId="diary-sort"
           />
           <SortFilterDropdown
-            label="Source"
+            label="Genre"
             icon={Filter}
-            value={filterSource}
-            options={FILTER_OPTIONS}
-            onChange={setFilterSource}
-            testId="diary-filter-source"
+            value={filterGenre}
+            options={GENRE_OPTIONS}
+            onChange={setFilterGenre}
+            testId="diary-filter-genre"
           />
+          <SortFilterDropdown
+            label="Decade"
+            icon={Filter}
+            value={filterDecade}
+            options={DECADE_OPTIONS}
+            onChange={setFilterDecade}
+            testId="diary-filter-decade"
+          />
+          <SortFilterDropdown
+            label="Rating"
+            icon={Star}
+            value={filterRating}
+            options={RATING_OPTIONS}
+            onChange={setFilterRating}
+            testId="diary-filter-rating"
+          />
+          
+          {/* View Toggle */}
+          <div className="ml-auto flex items-center gap-1 bg-chef-surface/60 border border-white/10 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-2 rounded-md transition-colors ${viewMode === "list" ? "bg-chef-teal/20 text-chef-teal" : "text-chef-muted hover:text-chef-platinum"}`}
+              title="List View"
+              data-testid="diary-view-list"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("calendar")}
+              className={`p-2 rounded-md transition-colors ${viewMode === "calendar" ? "bg-chef-teal/20 text-chef-teal" : "text-chef-muted hover:text-chef-platinum"}`}
+              title="Calendar View"
+              data-testid="diary-view-calendar"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -754,6 +1020,21 @@ const DiaryTab = () => {
                     />
                   </div>
                 </div>
+                {/* Comment field */}
+                <div className="mt-4">
+                  <label className="block text-xs text-chef-muted uppercase tracking-wider mb-1.5">
+                    <MessageSquare className="w-3 h-3 inline mr-1" />
+                    Comment (optional)
+                  </label>
+                  <textarea
+                    value={addComment}
+                    onChange={(e) => setAddComment(e.target.value)}
+                    placeholder="Add a note about this watch..."
+                    rows={2}
+                    className="w-full bg-chef-bg/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-chef-platinum placeholder:text-chef-muted/30 focus:outline-none focus:border-chef-teal/40 resize-none"
+                    data-testid="diary-comment-input"
+                  />
+                </div>
                 <div className="flex gap-2 mt-4">
                   <button
                     onClick={handleAdd}
@@ -775,76 +1056,100 @@ const DiaryTab = () => {
         )}
       </AnimatePresence>
 
-      {/* History list */}
+      {/* History - List or Calendar View */}
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 text-chef-teal animate-spin" />
         </div>
-      ) : processedHistory.length > 0 ? (
-        <div className="space-y-2">
-          {processedHistory.map((item) => (
-            <motion.div
-              key={item.tmdb_id}
-              layout
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-4 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5 hover:border-white/10 transition-colors group cursor-pointer"
-              onClick={() => setSelectedMovie(item)}
-              data-testid={`diary-item-${item.tmdb_id}`}
+      ) : viewMode === "list" ? (
+        // List View
+        processedHistory.length > 0 ? (
+          <div className="space-y-2">
+            {processedHistory.map((item) => {
+              // Generate poster URL from poster_path or use poster_url directly
+              const posterUrl = item.poster_url || (item.poster_path ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : null);
+              return (
+                <motion.div
+                  key={item.tmdb_id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-4 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5 hover:border-white/10 transition-colors group cursor-pointer"
+                  onClick={() => setSelectedMovie(item)}
+                  data-testid={`diary-item-${item.tmdb_id}`}
+                >
+                  {posterUrl ? (
+                    <img src={posterUrl} alt="" className="w-10 h-15 rounded object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-10 h-15 rounded bg-chef-bg flex-shrink-0 flex items-center justify-center">
+                      <Film className="w-4 h-4 text-chef-muted/30" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-chef-platinum truncate font-medium">{item.title}</p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="flex items-center gap-1 text-xs text-chef-gold">
+                        <Star className="w-3 h-3" fill="currentColor" />
+                        {(item.user_rating || 0).toFixed(1)}
+                      </span>
+                      {item.last_watched_date && (
+                        <span className="flex items-center gap-1 text-xs text-chef-muted">
+                          <Calendar className="w-3 h-3" />
+                          {item.last_watched_date}
+                        </span>
+                      )}
+                      {item.watch_count > 1 && (
+                        <span className="text-xs text-chef-muted/60">{item.watch_count}x</span>
+                      )}
+                      {item.source === "letterboxd" && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 uppercase tracking-wider font-medium">LB</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRemove(item.tmdb_id, item.title); }}
+                    className="p-2 rounded-lg text-chef-muted/30 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                    data-testid={`remove-diary-${item.tmdb_id}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              );
+            })}
+          </div>
+        ) : watchHistory.length > 0 ? (
+          <div className="text-center py-16">
+            <Filter className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
+            <p className="text-sm text-chef-muted/50">No movies match your filter</p>
+            <button 
+              onClick={() => { setFilterGenre("all"); setFilterDecade("all"); setFilterRating("all"); }}
+              className="text-xs text-chef-teal hover:underline mt-2"
             >
-              {item.poster_path ? (
-                <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="w-10 h-15 rounded object-cover flex-shrink-0" />
-              ) : (
-                <div className="w-10 h-15 rounded bg-chef-bg flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-chef-platinum truncate font-medium">{item.title}</p>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="flex items-center gap-1 text-xs text-chef-gold">
-                    <Star className="w-3 h-3" fill="currentColor" />
-                    {(item.user_rating || 0).toFixed(1)}
-                  </span>
-                  {item.last_watched_date && (
-                    <span className="flex items-center gap-1 text-xs text-chef-muted">
-                      <Calendar className="w-3 h-3" />
-                      {item.last_watched_date}
-                    </span>
-                  )}
-                  {item.watch_count > 1 && (
-                    <span className="text-xs text-chef-muted/60">{item.watch_count}x</span>
-                  )}
-                  {item.source === "letterboxd" && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 uppercase tracking-wider font-medium">LB</span>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleRemove(item.tmdb_id, item.title); }}
-                className="p-2 rounded-lg text-chef-muted/30 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                data-testid={`remove-diary-${item.tmdb_id}`}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </motion.div>
-          ))}
-        </div>
-      ) : watchHistory.length > 0 ? (
-        <div className="text-center py-16">
-          <Filter className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
-          <p className="text-sm text-chef-muted/50">No movies match your filter</p>
-          <button 
-            onClick={() => setFilterSource("all")}
-            className="text-xs text-chef-teal hover:underline mt-2"
-          >
-            Clear filter
-          </button>
-        </div>
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <Film className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
+            <p className="text-sm text-chef-muted/50">No movies in your diary yet</p>
+            <p className="text-xs text-chef-muted/30 mt-1">Search above to start tracking!</p>
+          </div>
+        )
       ) : (
-        <div className="text-center py-16">
-          <Film className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
-          <p className="text-sm text-chef-muted/50">No movies in your diary yet</p>
-          <p className="text-xs text-chef-muted/30 mt-1">Search above to start tracking!</p>
-        </div>
+        // Calendar View - Movies grouped by month
+        moviesByMonth.length > 0 ? (
+          <CalendarView 
+            moviesByMonth={moviesByMonth} 
+            onMovieClick={setSelectedMovie}
+            onMovieRemove={handleRemove}
+          />
+        ) : (
+          <div className="text-center py-16">
+            <Film className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
+            <p className="text-sm text-chef-muted/50">No movies in your diary yet</p>
+            <p className="text-xs text-chef-muted/30 mt-1">Search above to start tracking!</p>
+          </div>
+        )
       )}
 
       {/* Diary Detail Modal */}
@@ -868,7 +1173,7 @@ const DiaryTab = () => {
 };
 
 // ========== WATCHLIST TAB ==========
-const WatchlistTab = () => {
+const WatchlistTab = ({ onMovieClick }) => {
   const debounceRef = useRef(null);
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -880,7 +1185,7 @@ const WatchlistTab = () => {
   
   // Sort & Filter state
   const [sortBy, setSortBy] = useState("added_desc");
-  const [filterSource, setFilterSource] = useState("all");
+  const [filterGenre, setFilterGenre] = useState("all");
 
   const SORT_OPTIONS = [
     { value: "added_desc", label: "Recently Added" },
@@ -893,10 +1198,14 @@ const WatchlistTab = () => {
     { value: "release_asc", label: "Oldest Release" },
   ];
 
-  const FILTER_OPTIONS = [
-    { value: "all", label: "All Sources" },
-    { value: "manual", label: "Manual" },
-    { value: "letterboxd", label: "Letterboxd" },
+  const GENRE_OPTIONS = [
+    { value: "all", label: "All Genres" },
+    { value: "Action", label: "Action" },
+    { value: "Comedy", label: "Comedy" },
+    { value: "Drama", label: "Drama" },
+    { value: "Horror", label: "Horror" },
+    { value: "Romance", label: "Romance" },
+    { value: "Thriller", label: "Thriller" },
   ];
 
   useEffect(() => { fetchWatchlist(); }, []);
@@ -908,7 +1217,9 @@ const WatchlistTab = () => {
     try {
       const res = await axios.get(`${API}/user/watchlist`, { headers: authHeaders() });
       setWatchlist(res.data || []);
-    } catch {} finally { setLoading(false); }
+    } catch (err) {
+      // Handle silently
+    } finally { setLoading(false); }
   };
 
   const handleSearch = useCallback((q) => {
@@ -927,10 +1238,14 @@ const WatchlistTab = () => {
 
   const handleAdd = async (movie) => {
     try {
+      // Use poster_path if available, otherwise extract from poster_url
+      const posterPath = movie.poster_path || 
+        (movie.poster_url ? movie.poster_url.replace("https://image.tmdb.org/t/p/w185", "").replace("https://image.tmdb.org/t/p/w500", "") : null);
+      
       await axios.post(`${API}/user/watchlist`, {
         tmdb_id: movie.id,
         title: movie.title,
-        poster_path: movie.poster_url ? movie.poster_url.split("/").pop() : null,
+        poster_path: posterPath,
         release_date: movie.year || null,
         vote_average: movie.rating || null,
       }, { headers: authHeaders() });
@@ -971,11 +1286,15 @@ const WatchlistTab = () => {
   const getProcessedWatchlist = () => {
     let filtered = [...watchlist];
     
-    // Filter by source
-    if (filterSource !== "all") {
-      filtered = filtered.filter((item) => 
-        filterSource === "letterboxd" ? item.source === "letterboxd" : item.source !== "letterboxd"
-      );
+    // Filter by genre
+    if (filterGenre !== "all") {
+      filtered = filtered.filter((item) => {
+        const genres = item.genres || [];
+        return genres.some(g => {
+          const genreName = typeof g === 'string' ? g : g?.name;
+          return genreName?.toLowerCase().includes(filterGenre.toLowerCase());
+        });
+      });
     }
     
     // Sort
@@ -1006,13 +1325,14 @@ const WatchlistTab = () => {
   };
 
   const processedWatchlist = getProcessedWatchlist();
+  const hasActiveFilters = filterGenre !== "all";
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-chef-muted">
           {processedWatchlist.length} movie{processedWatchlist.length !== 1 ? "s" : ""} to watch
-          {filterSource !== "all" && ` (filtered from ${watchlist.length})`}
+          {hasActiveFilters && ` (filtered from ${watchlist.length})`}
         </p>
         {watchlist.length > 0 && (
           <button
@@ -1038,12 +1358,12 @@ const WatchlistTab = () => {
             testId="watchlist-sort"
           />
           <SortFilterDropdown
-            label="Source"
+            label="Genre"
             icon={Filter}
-            value={filterSource}
-            options={FILTER_OPTIONS}
-            onChange={setFilterSource}
-            testId="watchlist-filter-source"
+            value={filterGenre}
+            options={GENRE_OPTIONS}
+            onChange={setFilterGenre}
+            testId="watchlist-filter-genre"
           />
         </div>
       )}
@@ -1152,56 +1472,63 @@ const WatchlistTab = () => {
         </div>
       ) : processedWatchlist.length > 0 ? (
         <div className="space-y-2">
-          {processedWatchlist.map((item) => (
-            <motion.div
-              key={item.tmdb_id}
-              layout
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-4 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5 hover:border-white/10 transition-colors group"
-              data-testid={`watchlist-item-${item.tmdb_id}`}
-            >
-              {item.poster_path ? (
-                <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="w-10 h-15 rounded object-cover flex-shrink-0" />
-              ) : (
-                <div className="w-10 h-15 rounded bg-chef-bg flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-chef-platinum truncate font-medium">{item.title}</p>
-                <div className="flex items-center gap-3 mt-1">
-                  {item.vote_average && (
-                    <span className="flex items-center gap-1 text-xs text-chef-gold">
-                      <Star className="w-3 h-3" fill="currentColor" />
-                      {item.vote_average.toFixed(1)}
-                    </span>
-                  )}
-                  {item.release_date && (
-                    <span className="text-xs text-chef-muted">{item.release_date}</span>
-                  )}
-                  {item.genres && item.genres.length > 0 && (
-                    <span className="text-xs text-chef-muted/60">{item.genres.slice(0, 2).join(", ")}</span>
-                  )}
-                  {item.source === "letterboxd" && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 uppercase tracking-wider font-medium">LB</span>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={() => handleRemove(item.tmdb_id, item.title)}
-                className="p-2 rounded-lg text-chef-muted/30 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                data-testid={`remove-watchlist-${item.tmdb_id}`}
+          {processedWatchlist.map((item) => {
+            // Generate poster URL from poster_path or use poster_url directly
+            const posterUrl = item.poster_url || (item.poster_path ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : null);
+            return (
+              <motion.div
+                key={item.tmdb_id}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-4 px-4 py-3 rounded-lg bg-chef-surface/40 border border-white/5 hover:border-white/10 transition-colors group cursor-pointer"
+                onClick={() => onMovieClick && onMovieClick({ id: item.tmdb_id, ...item })}
+                data-testid={`watchlist-item-${item.tmdb_id}`}
               >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </motion.div>
-          ))}
+                {posterUrl ? (
+                  <img src={posterUrl} alt="" className="w-10 h-15 rounded object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-10 h-15 rounded bg-chef-bg flex-shrink-0 flex items-center justify-center">
+                    <Film className="w-4 h-4 text-chef-muted/30" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-chef-platinum truncate font-medium">{item.title}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    {item.vote_average && (
+                      <span className="flex items-center gap-1 text-xs text-chef-gold">
+                        <Star className="w-3 h-3" fill="currentColor" />
+                        {item.vote_average.toFixed(1)}
+                      </span>
+                    )}
+                    {item.release_date && (
+                      <span className="text-xs text-chef-muted">{item.release_date}</span>
+                    )}
+                    {item.genres && item.genres.length > 0 && (
+                      <span className="text-xs text-chef-muted/60">{item.genres.slice(0, 2).join(", ")}</span>
+                    )}
+                    {item.source === "letterboxd" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 uppercase tracking-wider font-medium">LB</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleRemove(item.tmdb_id, item.title); }}
+                  className="p-2 rounded-lg text-chef-muted/30 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                  data-testid={`remove-watchlist-${item.tmdb_id}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </motion.div>
+            );
+          })}
         </div>
       ) : watchlist.length > 0 ? (
         <div className="text-center py-16">
           <Filter className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
           <p className="text-sm text-chef-muted/50">No movies match your filter</p>
           <button 
-            onClick={() => setFilterSource("all")}
+            onClick={() => setFilterGenre("all")}
             className="text-xs text-chef-teal hover:underline mt-2"
           >
             Clear filter
@@ -1461,7 +1788,7 @@ const ProfileTab = ({ user, onUserUpdate }) => {
 };
 
 // ========== MAIN PAGE ==========
-const MyMoviesPage = ({ user, onUserUpdate }) => {
+const MyMoviesPage = ({ user, onUserUpdate, onMovieClick }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("diary");
 
@@ -1523,8 +1850,8 @@ const MyMoviesPage = ({ user, onUserUpdate }) => {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === "diary" && <DiaryTab />}
-            {activeTab === "watchlist" && <WatchlistTab />}
+            {activeTab === "diary" && <DiaryTab onMovieClick={onMovieClick} />}
+            {activeTab === "watchlist" && <WatchlistTab onMovieClick={onMovieClick} />}
             {activeTab === "profile" && <ProfileTab user={user} onUserUpdate={onUserUpdate} />}
           </motion.div>
         </AnimatePresence>

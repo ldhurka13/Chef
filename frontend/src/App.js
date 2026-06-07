@@ -615,7 +615,11 @@ function AppContent() {
             <Route
               path="/my-movies"
               element={
-                <MyMoviesPage user={authUser} onUserUpdate={(updated) => setAuthUser(updated)} />
+                <MyMoviesPage 
+                  user={authUser} 
+                  onUserUpdate={(updated) => setAuthUser(updated)} 
+                  onMovieClick={handleMovieClick}
+                />
               }
             />
             <Route

@@ -235,3 +235,15 @@ Build a context-aware movie recommendation engine called "Chef" with:
   - Created auth router with 9 endpoints (ready for integration)
   - Original server.py still functional (backwards compatible)
   - See /app/backend/ARCHITECTURE.md for migration guide
+
+### Bug Fixes (Latest Session - June 7, 2026)
+1. **Fixed poster display for manually added movies in Diary** - Backend now returns `poster_url` in watch history and watchlist endpoints
+2. **Fixed poster display for Your Bucketlist and Discover sections** - Added `poster_url` to curated-for-you and explore-for-you endpoints
+3. **Added Comment field when adding new films to Diary** - New textarea in add movie form, saved to watch entry
+4. **Added Calendar View for Diary** - Interactive month-based carousel view with:
+   - Toggle between List view and Calendar view
+   - Movies grouped by month with navigation arrows
+   - Movie cards with hover overlay showing rating and comment
+   - Timeline indicator showing current position
+5. **Replaced Source filter with Genre, Decade, Rating filters** - Improved filtering options in Diary tab
+6. **Watchlist items now clickable** - Opens movie detail modal when clicking on watchlist items
