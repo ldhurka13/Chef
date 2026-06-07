@@ -23,30 +23,53 @@ Build a context-aware movie recommendation engine called "Chef" with:
 ```
 /app/
 ├── backend/
-│   ├── .env (MONGO_URL, DB_NAME, TMDB_API_KEY, CORS_ORIGINS, JWT_SECRET, RAPIDAPI_KEY, RESEND_API_KEY)
+│   ├── .env
 │   ├── requirements.txt
-│   ├── server.py (all endpoints, models, business logic)
-│   └── tests/test_my_movies_watchlist.py
+│   ├── server.py           # Main entry point (migrating to modular structure)
+│   ├── config.py           # ✅ Settings, env vars, constants
+│   ├── database.py         # ✅ MongoDB connection
+│   ├── ARCHITECTURE.md     # Migration guide
+│   ├── models/             # ✅ Pydantic models
+│   │   ├── user.py         # User, UserRegister, UserLogin, etc.
+│   │   ├── movie.py        # MovieMetadata, VibeParams, AIVibeRequest
+│   │   ├── watch_history.py
+│   │   ├── watchlist.py
+│   │   └── game.py
+│   ├── routers/            # API route handlers
+│   │   └── auth.py         # ✅ Auth endpoints (9 routes)
+│   ├── services/           # ✅ Business logic
+│   │   ├── auth_service.py # Password hashing, JWT, get_current_user
+│   │   ├── tmdb_service.py # TMDB API, caching, genres
+│   │   ├── streaming.py    # MoviesOfTheNight integration
+│   │   └── weather.py      # Open-Meteo weather API
+│   ├── utils/              # ✅ Utilities
+│   │   ├── scoring.py      # Complexity, nostalgia, rewatchability
+│   │   └── helpers.py      # Vibe tags, match reasons
+│   └── tests/
 ├── frontend/
 │   ├── .env (REACT_APP_BACKEND_URL)
 │   ├── package.json
 │   ├── tailwind.config.js
 │   └── src/
-│       ├── App.js (main component, routing, state management)
+│       ├── App.js
 │       ├── index.css
 │       └── components/
 │           ├── AuthModal.js
 │           ├── FeelingSearch.js
-│           ├── FloatingNav.js (Home, Vibe, Random, My Movies, Comfort)
+│           ├── FloatingNav.js
 │           ├── LocationPermissionModal.js
 │           ├── MovieCard.js
-│           ├── MovieDetail.js (includes watchlist toggle button)
-│           ├── MyMoviesPage.js (Diary, Watchlist, Profile tabs)
+│           ├── MovieDetail.js
+│           ├── MyMoviesPage.js
 │           ├── ResetPassword.js
-│           ├── UserDetails.js (Photo, Personal Info, Streaming, Letterboxd)
-│           └── UserMenu.js
+│           ├── UserDetails.js
+│           ├── UserMenu.js
+│           ├── VibeConsole.js
+│           ├── SectionNav.js
+│           └── MovieGame.jsx
 └── memory/
-    └── PRD.md
+    ├── PRD.md
+    └── test_credentials.md
 ```
 
 ## Key API Endpoints
@@ -169,7 +192,13 @@ Build a context-aware movie recommendation engine called "Chef" with:
 ## Future Tasks (P2)
 - [ ] JustWatch API Integration - Replace/augment MoviesOfTheNight for streaming availability
 - [ ] Refactor App.js into React Context providers
-- [ ] Split backend/server.py into routers, models, services (currently 4500+ lines)
+- [x] **Split backend/server.py into modular structure** - Phase 1 Complete:
+  - ✅ config.py, database.py created
+  - ✅ models/ directory with all Pydantic models
+  - ✅ services/ directory (auth, tmdb, streaming, weather)
+  - ✅ utils/ directory (scoring, helpers)
+  - ✅ routers/auth.py (9 endpoints ready)
+  - 🔄 Remaining: Migrate endpoints from server.py to routers/
 - [ ] Persist game sessions to MongoDB (currently in-memory - lost on server restart)
 
 ## Session Notes (April 2026)
@@ -191,8 +220,18 @@ Build a context-aware movie recommendation engine called "Chef" with:
   - Watch Context selector: Solo (introspective), Date (romantic), Group (crowd-pleaser)
   - Web search for Reddit/Letterboxd sentiment with LLM fallback
   - Personalized vibe_reason explanations for each recommendation
+  - **Updated**: Now returns 20 ranked movies with vibe_score (instead of 5)
 - **Vibe Console UI Refinements**:
   - Updated slider labels: Emotion (Serious/Fun), Energy (Exhausted/LFG)
   - Added margins to modal for better spacing
   - Compact rectangular watch context buttons
   - Fine-tuned vibe intersection logic (e.g., Low Brain + High Emotion = slapstick)
+  - **Updated**: Reverted to bigger sliders (h-48, w-6) for better usability
+- **Backend Modularization (Phase 1)**:
+  - Created modular directory structure: config.py, database.py, models/, services/, utils/, routers/
+  - Extracted all Pydantic models to separate files
+  - Extracted services: auth_service.py, tmdb_service.py, streaming.py, weather.py
+  - Extracted utilities: scoring.py, helpers.py
+  - Created auth router with 9 endpoints (ready for integration)
+  - Original server.py still functional (backwards compatible)
+  - See /app/backend/ARCHITECTURE.md for migration guide

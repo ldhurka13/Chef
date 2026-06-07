@@ -1,33 +1,3 @@
-"""
-Chef - Context-Aware Movie Recommendation Engine
-================================================
-
-MODULAR ARCHITECTURE (Available for incremental migration):
-----------------------------------------------------------
-/app/backend/
-├── config.py              # Settings, env vars, constants
-├── database.py            # MongoDB connection
-├── models/
-│   ├── user.py            # User, UserRegister, UserLogin, etc.
-│   ├── movie.py           # MovieMetadata, VibeParams, AIVibeRequest
-│   ├── watch_history.py   # WatchHistoryItem, WatchEntryCreate, etc.
-│   ├── watchlist.py       # WatchlistAdd
-│   └── game.py            # GameChoiceV2
-├── routers/
-│   └── auth.py            # Authentication routes (ready to use)
-├── services/
-│   ├── auth_service.py    # Password hashing, JWT tokens
-│   ├── tmdb_service.py    # TMDB API, caching, genres
-│   ├── streaming.py       # MoviesOfTheNight streaming availability
-│   └── weather.py         # Open-Meteo weather for comfort movies
-└── utils/
-    ├── scoring.py         # Complexity, nostalgia, rewatchability
-    └── helpers.py         # Vibe tags, match reasons
-
-To complete migration, import from modules instead of inline definitions.
-Example: from services.auth_service import hash_password, verify_password
-"""
-
 from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, UploadFile, File
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
