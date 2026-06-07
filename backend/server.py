@@ -171,9 +171,8 @@ class ResetPasswordRequest(BaseModel):
 
 class AIVibeRequest(BaseModel):
     brain_power: int = Field(ge=0, le=100, default=50)
-    mood: int = Field(ge=0, le=100, default=50)  # 0=Need a Cry (emotional), 100=Need a Laugh (comedy)
-    energy: int = Field(ge=0, le=100, default=50)
-    include_rewatches: bool = False
+    mood: int = Field(ge=0, le=100, default=50)  # 0=Serious (dramatic), 100=Fun (comedy)
+    energy: int = Field(ge=0, le=100, default=50)  # 0=Exhausted (calming), 100=LFG (intense)
     watch_context: str = Field(default="solo")  # "solo", "date", "group"
 
 # ============ AUTH HELPERS ============
@@ -3573,6 +3572,75 @@ async def discover_movies(vibe_params: VibeParams):
     }
 
 
+# ============ CHEF'S CURATION ============
+
+@api_router.get("/movies/chefs-curation")
+async def get_chefs_curation(current_user: dict = Depends(get_current_user)):
+    """
+    Chef's Curation - Default personalized recommendations WITHOUT watchlist filtering.
+    Includes a mix of movies the user has watched, wants to watch, and hasn't heard of.
+    Uses the same algorithm as curated-for-you but without excluding any movies.
+    """
+    global GENRE_MAP
+    if not GENRE_MAP:
+        GENRE_MAP = get_genres()
+    
+    user_id = current_user.get("id") if current_user else None
+    
+    # Get user's preferences from insights cache if available
+    user_genres = []
+    user_directors = []
+    
+    if user_id:
+        insights = await db.user_insights_cache.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "top_genres": 1, "top_directors": 1}
+        )
+        if insights:
+            user_genres = [g["name"] for g in insights.get("top_genres", [])[:5]]
+            user_directors = [d["name"] for d in insights.get("top_directors", [])[:3]]
+    
+    # Build discovery query based on user preferences
+    if user_genres:
+        genre_ids = [gid for gid, name in GENRE_MAP.items() if name in user_genres[:3]]
+        genre_filter = ",".join(str(g) for g in genre_ids) if genre_ids else None
+    else:
+        genre_filter = None
+    
+    discover_params = {
+        "sort_by": "vote_average.desc",
+        "vote_count.gte": 300,
+        "vote_average.gte": 7.0
+    }
+    if genre_filter:
+        discover_params["with_genres"] = genre_filter
+    
+    data = tmdb_request("/discover/movie", discover_params)
+    
+    if not data:
+        # Fallback to popular
+        data = tmdb_request("/movie/popular")
+    
+    results = []
+    for movie in data.get("results", [])[:20]:
+        genre_names = [GENRE_MAP.get(gid, "") for gid in movie.get("genre_ids", []) if gid in GENRE_MAP]
+        
+        results.append({
+            "id": movie.get("id"),
+            "title": movie.get("title", ""),
+            "poster_path": movie.get("poster_path"),
+            "backdrop_path": movie.get("backdrop_path"),
+            "overview": movie.get("overview", ""),
+            "release_date": movie.get("release_date", ""),
+            "vote_average": movie.get("vote_average", 0),
+            "genres": genre_names,
+            "poster_url": get_image_url(movie.get("poster_path"), "w500"),
+            "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
+        })
+    
+    return {"results": results}
+
+
 # ============ AI VIBE RECOMMENDATIONS ============
 
 @api_router.post("/movies/ai-vibe-recommendations")
@@ -3713,6 +3781,7 @@ async def get_ai_vibe_recommendations(
     # Low Brain Power + Low Energy = Ultimate background/comfort viewing
     if bp < 40 and energy < 40:
         intersection_notes.append("EASY + CHILL: Perfect background movies, comfort films, can fall asleep to")
+        intersection_notes.append("REWATCHABILITY HIGH: User is zoned out - recommend highly rewatchable comfort favorites")
     
     # High Energy + High Emotion = Wild fun action comedies
     if energy > 60 and mood > 60:
@@ -3729,10 +3798,21 @@ async def get_ai_vibe_recommendations(
     # Low Energy + High Emotion = Feel-good comfort comedies
     if energy < 40 and mood > 60:
         intersection_notes.append("CHILL + FUN: Feel-good comedies, heartwarming humor, cozy funny films")
+        intersection_notes.append("REWATCHABILITY HIGH: User wants comfort humor - classic rewatchable comedies welcome")
     
     # High Brain Power + High Energy + Serious = Mind-bending thrillers
     if bp > 60 and energy > 60 and mood < 40:
         intersection_notes.append("COMPLEX + INTENSE + SERIOUS: Mind-bending thrillers, psychological intensity, requires focus")
+    
+    # ========== REWATCHABILITY LOGIC ==========
+    # Low Brain Power = More zoned out = Higher rewatchability preference
+    # Low Energy = More exhausted = Higher comfort/familiar film preference
+    include_rewatches = (bp < 40 or energy < 40)
+    rewatchability_note = ""
+    if bp < 30 and energy < 30:
+        rewatchability_note = "VERY HIGH REWATCHABILITY: User is completely zoned out and exhausted - prioritize ultimate comfort classics they may have already seen"
+    elif bp < 40 or energy < 40:
+        rewatchability_note = "MODERATE REWATCHABILITY: Mix of new discoveries and familiar comfort films"
     
     # Build search queries for web research
     search_keywords = []
@@ -3783,8 +3863,11 @@ async def get_ai_vibe_recommendations(
         web_context = ""
     
     # Build the prompt for LLM
+    # Dynamic rewatchability based on vibe - don't exclude watched movies for low brain/energy
+    include_rewatches_dynamic = (bp < 40 or energy < 40)
+    
     watch_history_text = ""
-    if user_profile["watch_history"] and not vibe_request.include_rewatches:
+    if user_profile["watch_history"] and not include_rewatches_dynamic:
         watched_titles = [w["title"] for w in user_profile["watch_history"] if w["title"]]
         if watched_titles:
             watch_history_text = f"\n\nUser's watch history (EXCLUDE these titles): {', '.join(watched_titles[:30])}"
@@ -3798,7 +3881,8 @@ async def get_ai_vibe_recommendations(
         profile_text += f"\nFavorite actors: {', '.join(user_profile['top_actors'])}"
     
     system_prompt = """You are an expert cinephile and movie recommendation engine. 
-Your task is to recommend 5 movies based on the user's current vibe, watch context, and preferences.
+Your task is to recommend 20 movies based on the user's current vibe, watch context, and preferences.
+RANK THEM from HIGHEST vibe match (#1) to lowest (#20).
 
 VIBE PARAMETER INTERPRETATION:
 
@@ -3830,17 +3914,27 @@ IMPORTANT VIBE INTERSECTIONS:
 - Low Brain + Low Energy = Perfect background/comfort films, can fall asleep to
 - High Brain + High Energy + High Emotion = Wild clever comedies, inventive fun
 
-GUIDELINES:
-1. Prioritize "hidden gems" over mainstream blockbusters
-2. Match ALL THREE vibe parameters, not just one
-3. Consider the intersections - they define the specific mood
-4. Each recommendation needs a specific reason tied to the vibe
-5. All movies must be searchable on TMDB
+REWATCHABILITY RULE:
+- When Brain Power is LOW (<40) or Energy is LOW (<40), include highly rewatchable comfort films
+- The more "zoned out" the user, the higher the rewatchability characteristic should be
+- Comfort favorites and classics are welcome when the user is exhausted
 
-Return ONLY a valid JSON array with exactly 5 movies:
+RANKING GUIDELINES:
+1. RANK BY VIBE MATCH: #1 should be the BEST match for the exact vibe combination, #20 is still good but less precise
+2. Prioritize "hidden gems" over mainstream blockbusters
+3. Match ALL THREE vibe parameters, not just one
+4. Consider the intersections - they define the specific mood
+5. For low brain/energy, include rewatchable comfort favorites
+6. Each recommendation needs a specific reason tied to the vibe
+7. All movies must be searchable on TMDB
+8. Include a vibe_score (0-100) indicating how well the movie matches the requested vibe
+
+Return ONLY a valid JSON array with exactly 20 movies, ranked from best match to lowest:
 [
-  {"title": "Movie Name", "year": "YYYY", "reason": "Short vibe-match justification (max 20 words)"},
+  {"rank": 1, "title": "Movie Name", "year": "YYYY", "vibe_score": 98, "reason": "Short vibe-match justification (max 20 words)"},
+  {"rank": 2, "title": "Movie Name", "year": "YYYY", "vibe_score": 95, "reason": "..."},
   ...
+  {"rank": 20, "title": "Movie Name", "year": "YYYY", "vibe_score": 70, "reason": "..."}
 ]"""
 
     watch_context_text = {
@@ -3852,7 +3946,7 @@ Return ONLY a valid JSON array with exactly 5 movies:
     # Build intersection notes for the prompt
     intersection_text = "\n".join(intersection_notes) if intersection_notes else ""
 
-    user_prompt = f"""Find 5 movies for this vibe: {vibe_text}
+    user_prompt = f"""Find 20 movies for this vibe, ranked from BEST match to good match: {vibe_text}
 
 VIBE PARAMETERS:
 - Brain Power: {bp}/100 → {"COMPLEX (non-linear, dense, long runtime, needs concentration)" if bp > 60 else "SIMPLE (easy to follow, background-friendly)" if bp < 40 else "MODERATE complexity"}
@@ -3860,14 +3954,17 @@ VIBE PARAMETERS:
 - Energy: {energy}/100 → {"LFG! (loud, vibrant, intense, high-octane)" if energy > 60 else "CHILL (feel-good, calming, low-stress, cozy)" if energy < 40 else "MODERATE energy"}
 
 Watch Context: {watch_context_text}
-{profile_text}{watch_history_text}
+{profile_text}
+
+{f"REWATCHABILITY: {rewatchability_note}" if rewatchability_note else "REWATCHABILITY: Focus on new discoveries"}
 
 {f"VIBE INTERSECTION ANALYSIS:{chr(10)}{intersection_text}" if intersection_text else ""}
 {web_context}
 
 Remember: Match ALL vibe parameters together. The intersection of Brain Power + Emotion + Energy defines the specific type of film needed.
+Rank from #1 (BEST vibe match, vibe_score ~95-100) down to #20 (still good match, vibe_score ~70-85).
 
-Return 5 hidden gem movie recommendations as a JSON array."""
+Return 20 ranked movie recommendations as a JSON array with rank, title, year, vibe_score, and reason fields."""
 
     try:
         # Initialize LLM chat
@@ -3901,10 +3998,12 @@ Return 5 hidden gem movie recommendations as a JSON array."""
     
     # Enrich recommendations with TMDB data
     enriched_results = []
-    for rec in ai_recommendations[:5]:
+    for rec in ai_recommendations[:20]:
         title = rec.get("title", "")
         year = rec.get("year", "")
         reason = rec.get("reason", "")
+        rank = rec.get("rank", len(enriched_results) + 1)
+        vibe_score = rec.get("vibe_score", 80)
         
         # Search TMDB for the movie
         search_query = f"{title}"
@@ -3932,17 +4031,24 @@ Return 5 hidden gem movie recommendations as a JSON array."""
                 "vote_average": movie.get("vote_average", 0),
                 "genres": genres if genres else (movie_details.get("genres", []) if movie_details else []),
                 "vibe_reason": reason,
+                "vibe_score": vibe_score,
+                "vibe_rank": rank,
                 "ai_recommended": True,
                 "poster_url": get_image_url(movie.get("poster_path"), "w500"),
                 "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
             })
     
+    # Sort by rank to ensure proper order
+    enriched_results.sort(key=lambda x: x.get("vibe_rank", 999))
+    
     # If we don't have enough results, pad with fallback
-    if len(enriched_results) < 3:
+    if len(enriched_results) < 10:
         fallback = await fallback_vibe_recommendations(vibe_request, user_id)
         for movie in fallback.get("results", []):
-            if len(enriched_results) < 5 and movie.get("id") not in [r.get("id") for r in enriched_results]:
+            if len(enriched_results) < 20 and movie.get("id") not in [r.get("id") for r in enriched_results]:
                 movie["vibe_reason"] = movie.get("match_reason", "Matches your current vibe")
+                movie["vibe_score"] = 70
+                movie["vibe_rank"] = len(enriched_results) + 1
                 movie["ai_recommended"] = False
                 enriched_results.append(movie)
     
@@ -4013,9 +4119,12 @@ async def fallback_vibe_recommendations(vibe_request: AIVibeRequest, user_id: st
         return {"results": [], "ai_powered": False}
     
     results = []
+    
+    # Dynamic rewatchability: Low brain power or low energy = include rewatches
+    include_rewatches = (bp < 40 or energy < 40)
     watched_ids = set()
     
-    if user_id and not vibe_request.include_rewatches:
+    if user_id and not include_rewatches:
         watch_history = await db.watch_history.find(
             {"user_id": user_id},
             {"_id": 0, "tmdb_id": 1}
@@ -4044,7 +4153,7 @@ async def fallback_vibe_recommendations(vibe_request: AIVibeRequest, user_id: st
             "backdrop_url": get_image_url(movie.get("backdrop_path"), "w1280"),
         })
         
-        if len(results) >= 5:
+        if len(results) >= 20:
             break
     
     return {"results": results, "ai_powered": False}

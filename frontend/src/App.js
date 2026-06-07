@@ -82,8 +82,11 @@ function AppContent() {
     brain_power: 50,
     mood: 50,
     energy: 50,
-    include_rewatches: false,
+    watch_context: "solo",
   });
+  const [vibeApplied, setVibeApplied] = useState(false);
+  const [chefsCurationMovies, setChefsCurationMovies] = useState([]);
+  const [chefsCurationLoading, setChefsCurationLoading] = useState(false);
   
   // Data states
   const [trendingMovies, setTrendingMovies] = useState([]);
@@ -94,12 +97,41 @@ function AppContent() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   
   // Section state
-  const [activeSection, setActiveSection] = useState("curated");
+  const [activeSection, setActiveSection] = useState("chefs-curation");
   const [sectionMovies, setSectionMovies] = useState([]);
   const [sectionLoading, setSectionLoading] = useState(false);
 
   // Fetch movies for a section
   const fetchSectionMovies = useCallback(async (section) => {
+    // For Chef's Curation, use dedicated state
+    if (section === "chefs-curation") {
+      // If vibe has been applied, use AI recommendations (already in state)
+      if (vibeApplied && chefsCurationMovies.length > 0) {
+        setSectionMovies(chefsCurationMovies);
+        return;
+      }
+      // Otherwise fetch default Chef's Curation (like curated but without watchlist filter)
+      setChefsCurationLoading(true);
+      setSectionLoading(true);
+      try {
+        const token = localStorage.getItem("chef_token");
+        const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await axios.get(`${API}/movies/chefs-curation`, { headers: authHeader });
+        setChefsCurationMovies(res.data.results || []);
+        setSectionMovies(res.data.results || []);
+      } catch (error) {
+        console.error("Failed to fetch Chef's Curation:", error);
+        // Fallback to discover
+        const res = await axios.post(`${API}/movies/discover`, vibeParams);
+        setChefsCurationMovies(res.data.results || []);
+        setSectionMovies(res.data.results || []);
+      } finally {
+        setChefsCurationLoading(false);
+        setSectionLoading(false);
+      }
+      return;
+    }
+    
     setSectionLoading(true);
     try {
       let res;
@@ -108,24 +140,22 @@ function AppContent() {
       
       switch (section) {
         case "curated":
-          // Use personalized endpoint if logged in, fallback to discover
+          // Your Bucketlist - personalized, excludes watched
           if (token) {
             res = await axios.get(`${API}/movies/curated-for-you`, { headers: authHeader });
           } else {
             res = await axios.post(`${API}/movies/discover`, vibeParams);
           }
           break;
-        case "chefs-special":
-          res = await axios.get(`${API}/movies/sections/chefs-special`);
-          break;
         case "certified-swangy":
-          res = await axios.get(`${API}/movies/sections/certified-swangy`);
+          // Trending Now
+          res = await axios.get(`${API}/movies/trending`);
           break;
         case "all-time-classics":
           res = await axios.get(`${API}/movies/sections/all-time-classics`);
           break;
         case "explore":
-          // Use personalized explore endpoint if logged in
+          // Discover - personalized but strictly excludes watchlist
           if (token) {
             res = await axios.get(`${API}/movies/explore-for-you`, { headers: authHeader });
           } else {
@@ -145,7 +175,7 @@ function AppContent() {
     } finally {
       setSectionLoading(false);
     }
-  }, [vibeParams]);
+  }, [vibeParams, vibeApplied, chefsCurationMovies]);
 
   // Handle section change
   const handleSectionChange = useCallback((section) => {
@@ -337,26 +367,69 @@ function AppContent() {
   }, []);
 
   // Handle vibe change
-  const handleVibeChange = useCallback(async (newParams) => {
+  const handleVibeChange = useCallback(async (newParams, useAI = false) => {
     setVibeParams(newParams);
-    // If on curated section, refresh it
-    if (activeSection === "curated") {
+    
+    // When Apply Vibe is clicked, fetch AI recommendations for Chef's Curation
+    if (useAI) {
+      setChefsCurationLoading(true);
       setSectionLoading(true);
       try {
         const token = localStorage.getItem("chef_token");
-        let res;
-        if (token) {
-          // Use personalized recommendations when logged in
-          res = await axios.get(`${API}/movies/curated-for-you`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+        const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+        
+        const res = await axios.post(`${API}/movies/ai-vibe-recommendations`, newParams, {
+          headers: authHeader
+        });
+        
+        const aiResults = res.data.results || [];
+        setChefsCurationMovies(aiResults);
+        setVibeApplied(true);
+        
+        // If on Chef's Curation, update displayed movies
+        if (activeSection === "chefs-curation") {
+          setSectionMovies(aiResults);
         } else {
-          res = await axios.post(`${API}/movies/discover`, newParams);
+          // Switch to Chef's Curation to show AI results
+          setActiveSection("chefs-curation");
+          setSectionMovies(aiResults);
         }
+        
+        toast.success(`Found ${aiResults.length} AI-curated picks for your vibe!`);
+      } catch (error) {
+        console.error("Failed to get AI recommendations:", error);
+        toast.error("AI recommendations unavailable. Try again later.");
+      } finally {
+        setChefsCurationLoading(false);
+        setSectionLoading(false);
+      }
+    }
+  }, [activeSection]);
+
+  // Reset vibe to default (for Chef's Curation)
+  const handleVibeReset = useCallback(async () => {
+    setVibeParams({
+      brain_power: 50,
+      mood: 50,
+      energy: 50,
+      watch_context: "solo",
+    });
+    setVibeApplied(false);
+    
+    // Refresh Chef's Curation with default recommendations
+    if (activeSection === "chefs-curation") {
+      setChefsCurationLoading(true);
+      setSectionLoading(true);
+      try {
+        const token = localStorage.getItem("chef_token");
+        const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await axios.get(`${API}/movies/chefs-curation`, { headers: authHeader });
+        setChefsCurationMovies(res.data.results || []);
         setSectionMovies(res.data.results || []);
       } catch (error) {
-        console.error("Failed to update curated:", error);
+        console.error("Failed to reset Chef's Curation:", error);
       } finally {
+        setChefsCurationLoading(false);
         setSectionLoading(false);
       }
     }
@@ -495,6 +568,7 @@ function AppContent() {
                     <SectionNav 
                       activeSection={activeSection}
                       onSectionChange={handleSectionChange}
+                      hasVibeApplied={vibeApplied}
                     />
                     
                     {activeSection === "marathon" ? (
@@ -574,6 +648,7 @@ function AppContent() {
         onOpenChange={setVibeConsoleOpen}
         params={vibeParams}
         onParamsChange={handleVibeChange}
+        onReset={handleVibeReset}
       />
       
       {/* Movie Detail Modal */}
@@ -602,7 +677,7 @@ function AppContent() {
               The Hangry Hail Mary
             </h2>
             <p className="text-center text-chef-muted/60 text-sm mb-8">
-              For when you don't care what it is, as long as it's hot
+              For when you don&apos;t care what it is, as long as it&apos;s hot
             </p>
             
             {/* Loading State */}

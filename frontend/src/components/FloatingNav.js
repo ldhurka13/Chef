@@ -64,6 +64,7 @@ const FloatingNav = ({ onVibeClick, onRandomClick, onGameClick }) => {
         label="Vibe"
         isActive={false}
         onClick={onVibeClick}
+        testId="nav-vibe-btn"
       />
       
       {/* Random Movie Button - Center Prominent */}
