@@ -1554,7 +1554,7 @@ async def get_user_profile():
 
 @api_router.get("/user/watch-history")
 async def get_watch_history(current_user: dict = Depends(get_current_user)):
-    """Get authenticated user's watch history"""
+    """Get authenticated user's watch history with enriched movie data"""
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -1563,7 +1563,7 @@ async def get_watch_history(current_user: dict = Depends(get_current_user)):
         {"_id": 0}
     ).sort("last_watched_date", -1).to_list(500)
     
-    # Auto-migrate: ensure every doc has a `watches` array and poster_url
+    # Auto-migrate and enrich with TMDB data
     for doc in history:
         if "watches" not in doc:
             watches = []
@@ -1593,6 +1593,20 @@ async def get_watch_history(current_user: dict = Depends(get_current_user)):
         # Add poster_url from poster_path if available
         if doc.get("poster_path") and not doc.get("poster_url"):
             doc["poster_url"] = get_image_url(doc["poster_path"], "w500")
+        
+        # Enrich with TMDB data if missing genres/release_date/runtime
+        if not doc.get("genres") or not doc.get("release_date"):
+            tmdb_id = doc.get("tmdb_id")
+            if tmdb_id:
+                movie_details = tmdb_request(f"/movie/{tmdb_id}")
+                if movie_details:
+                    doc["genres"] = [g.get("name") for g in movie_details.get("genres", [])]
+                    doc["release_date"] = movie_details.get("release_date", "")
+                    doc["runtime"] = movie_details.get("runtime", 0)
+                    # Update poster_url if missing
+                    if not doc.get("poster_url") and movie_details.get("poster_path"):
+                        doc["poster_url"] = get_image_url(movie_details.get("poster_path"), "w500")
+                        doc["poster_path"] = movie_details.get("poster_path")
     
     return history
 

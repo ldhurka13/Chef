@@ -77,6 +77,101 @@ const SortFilterDropdown = ({ label, icon: Icon, value, options, onChange, testI
   );
 };
 
+// ========== MULTI-SELECT FILTER DROPDOWN ==========
+const MultiSelectFilterDropdown = ({ label, options, selectedValues, onChange, testId }) => {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleValue = (value) => {
+    if (selectedValues.includes(value)) {
+      onChange(selectedValues.filter(v => v !== value));
+    } else {
+      onChange([...selectedValues, value]);
+    }
+  };
+
+  const clearAll = () => {
+    onChange([]);
+    setOpen(false);
+  };
+
+  const displayLabel = selectedValues.length === 0 
+    ? label 
+    : selectedValues.length === 1 
+      ? options.find(o => o.value === selectedValues[0])?.label || label
+      : `${selectedValues.length} selected`;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] border transition-colors
+          ${selectedValues.length > 0 
+            ? "bg-chef-teal/10 border-chef-teal/30 text-chef-teal" 
+            : "bg-chef-surface/60 border-white/10 text-chef-muted hover:text-chef-platinum hover:border-white/20"}`}
+        data-testid={`${testId}-btn`}
+      >
+        <span className="max-w-[80px] truncate">{displayLabel}</span>
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="absolute top-full left-0 mt-1 z-30 min-w-[180px] max-h-[280px] overflow-y-auto bg-chef-surface/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-cinematic"
+          >
+            {/* Header with clear button */}
+            {selectedValues.length > 0 && (
+              <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
+                <span className="text-[10px] text-chef-muted">{selectedValues.length} selected</span>
+                <button
+                  onClick={clearAll}
+                  className="text-[10px] text-chef-teal hover:text-chef-teal/80"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+            
+            {/* Options */}
+            {options.map((opt) => {
+              const isSelected = selectedValues.includes(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => toggleValue(opt.value)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] transition-colors
+                    ${isSelected ? "bg-chef-teal/10 text-chef-teal" : "text-chef-muted hover:text-chef-platinum hover:bg-white/5"}`}
+                  data-testid={`${testId}-${opt.value}`}
+                >
+                  <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0
+                    ${isSelected ? "bg-chef-teal border-chef-teal" : "border-white/20"}`}>
+                    {isSelected && <Check className="w-2.5 h-2.5 text-chef-bg" />}
+                  </div>
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 // ========== CALENDAR VIEW COMPONENT ==========
 const CalendarView = ({ moviesByMonth, onMovieClick, onMovieRemove }) => {
   const scrollRef = useRef(null);
@@ -583,11 +678,11 @@ const DiaryTab = ({ onMovieClick }) => {
   const [clearing, setClearing] = useState(false);
   const [viewMode, setViewMode] = useState("list"); // "list" or "calendar"
   
-  // Sort & Filter state
+  // Sort & Filter state - filters now use arrays for multi-select
   const [sortBy, setSortBy] = useState("date_desc");
-  const [filterGenre, setFilterGenre] = useState("all");
-  const [filterDecade, setFilterDecade] = useState("all");
-  const [filterRating, setFilterRating] = useState("all");
+  const [filterGenres, setFilterGenres] = useState([]);
+  const [filterDecades, setFilterDecades] = useState([]);
+  const [filterRatings, setFilterRatings] = useState([]);
 
   const SORT_OPTIONS = [
     { value: "date_desc", label: "Newest First" },
@@ -600,7 +695,6 @@ const DiaryTab = ({ onMovieClick }) => {
   ];
 
   const GENRE_OPTIONS = [
-    { value: "all", label: "All Genres" },
     { value: "Action", label: "Action" },
     { value: "Adventure", label: "Adventure" },
     { value: "Animation", label: "Animation" },
@@ -611,27 +705,30 @@ const DiaryTab = ({ onMovieClick }) => {
     { value: "Family", label: "Family" },
     { value: "Fantasy", label: "Fantasy" },
     { value: "Horror", label: "Horror" },
+    { value: "Music", label: "Music" },
+    { value: "Mystery", label: "Mystery" },
     { value: "Romance", label: "Romance" },
-    { value: "Sci-Fi", label: "Sci-Fi" },
+    { value: "Science Fiction", label: "Sci-Fi" },
     { value: "Thriller", label: "Thriller" },
+    { value: "War", label: "War" },
+    { value: "Western", label: "Western" },
   ];
 
   const DECADE_OPTIONS = [
-    { value: "all", label: "All Decades" },
     { value: "2020", label: "2020s" },
     { value: "2010", label: "2010s" },
     { value: "2000", label: "2000s" },
     { value: "1990", label: "1990s" },
     { value: "1980", label: "1980s" },
-    { value: "1970", label: "1970s & Earlier" },
+    { value: "1970", label: "1970s" },
+    { value: "1960", label: "1960s & Earlier" },
   ];
 
   const RATING_OPTIONS = [
-    { value: "all", label: "All Ratings" },
-    { value: "9", label: "9+ (Masterpiece)" },
-    { value: "8", label: "8+ (Great)" },
-    { value: "7", label: "7+ (Good)" },
-    { value: "6", label: "6+ (Decent)" },
+    { value: "9", label: "9+ Masterpiece" },
+    { value: "8", label: "8+ Great" },
+    { value: "7", label: "7+ Good" },
+    { value: "6", label: "6+ Decent" },
     { value: "5", label: "Below 6" },
   ];
 
@@ -724,40 +821,50 @@ const DiaryTab = ({ onMovieClick }) => {
   const getProcessedHistory = () => {
     let filtered = [...watchHistory];
     
-    // Filter by genre
-    if (filterGenre !== "all") {
+    // Filter by genres (multi-select - movie must match ANY selected genre)
+    if (filterGenres.length > 0) {
       filtered = filtered.filter((item) => {
-        const genres = item.genres || [];
-        return genres.some(g => {
-          const genreName = typeof g === 'string' ? g : g?.name;
-          return genreName?.toLowerCase().includes(filterGenre.toLowerCase());
+        const movieGenres = item.genres || [];
+        return filterGenres.some(selectedGenre => 
+          movieGenres.some(g => {
+            const genreName = typeof g === 'string' ? g : g?.name;
+            return genreName?.toLowerCase() === selectedGenre.toLowerCase();
+          })
+        );
+      });
+    }
+    
+    // Filter by decades (multi-select)
+    if (filterDecades.length > 0) {
+      filtered = filtered.filter((item) => {
+        // Get release year from movie's release_date
+        const releaseDate = item.release_date || "";
+        const releaseYear = releaseDate ? parseInt(releaseDate.substring(0, 4)) : 0;
+        
+        if (!releaseYear) return false;
+        
+        return filterDecades.some(decade => {
+          const decadeStart = parseInt(decade);
+          if (decade === "1960") {
+            return releaseYear < 1970;
+          }
+          return releaseYear >= decadeStart && releaseYear < decadeStart + 10;
         });
       });
     }
     
-    // Filter by decade
-    if (filterDecade !== "all") {
+    // Filter by ratings (multi-select)
+    if (filterRatings.length > 0) {
       filtered = filtered.filter((item) => {
-        const date = item.last_watched_date || "";
-        const year = parseInt(date.substring(0, 4)) || 0;
-        // Get release year from the movie if available
-        const releaseYear = item.release_year || year;
-        if (filterDecade === "1970") {
-          return releaseYear < 1980;
-        }
-        const decadeStart = parseInt(filterDecade);
-        return releaseYear >= decadeStart && releaseYear < decadeStart + 10;
+        const rating = item.user_rating || 0;
+        return filterRatings.some(ratingFilter => {
+          const minRating = parseInt(ratingFilter);
+          if (minRating === 5) {
+            return rating < 6;
+          }
+          return rating >= minRating && rating < minRating + 1;
+        });
       });
-    }
-    
-    // Filter by rating
-    if (filterRating !== "all") {
-      const minRating = parseInt(filterRating);
-      if (minRating === 5) {
-        filtered = filtered.filter((item) => (item.user_rating || 0) < 6);
-      } else {
-        filtered = filtered.filter((item) => (item.user_rating || 0) >= minRating);
-      }
     }
     
     // Sort
@@ -806,7 +913,14 @@ const DiaryTab = ({ onMovieClick }) => {
 
   const processedHistory = getProcessedHistory();
   const moviesByMonth = getMoviesByMonth();
-  const hasActiveFilters = filterGenre !== "all" || filterDecade !== "all" || filterRating !== "all";
+  const hasActiveFilters = filterGenres.length > 0 || filterDecades.length > 0 || filterRatings.length > 0;
+  const totalActiveFilters = filterGenres.length + filterDecades.length + filterRatings.length;
+
+  const clearAllFilters = () => {
+    setFilterGenres([]);
+    setFilterDecades([]);
+    setFilterRatings([]);
+  };
 
   return (
     <div>
@@ -829,58 +943,71 @@ const DiaryTab = ({ onMovieClick }) => {
 
       {/* Sort, Filter & View Controls */}
       {watchHistory.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          <SortFilterDropdown
-            label="Sort"
-            icon={ArrowUpDown}
-            value={sortBy}
-            options={SORT_OPTIONS}
-            onChange={setSortBy}
-            testId="diary-sort"
-          />
-          <SortFilterDropdown
-            label="Genre"
-            icon={Filter}
-            value={filterGenre}
-            options={GENRE_OPTIONS}
-            onChange={setFilterGenre}
-            testId="diary-filter-genre"
-          />
-          <SortFilterDropdown
-            label="Decade"
-            icon={Filter}
-            value={filterDecade}
-            options={DECADE_OPTIONS}
-            onChange={setFilterDecade}
-            testId="diary-filter-decade"
-          />
-          <SortFilterDropdown
-            label="Rating"
-            icon={Star}
-            value={filterRating}
-            options={RATING_OPTIONS}
-            onChange={setFilterRating}
-            testId="diary-filter-rating"
-          />
+        <div className="space-y-3 mb-6">
+          {/* Sort Row */}
+          <div className="flex items-center gap-3">
+            <SortFilterDropdown
+              label="Sort"
+              icon={ArrowUpDown}
+              value={sortBy}
+              options={SORT_OPTIONS}
+              onChange={setSortBy}
+              testId="diary-sort"
+            />
+            
+            {/* View Toggle */}
+            <div className="ml-auto flex items-center gap-1 bg-chef-surface/60 border border-white/10 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`p-2 rounded-md transition-colors ${viewMode === "list" ? "bg-chef-teal/20 text-chef-teal" : "text-chef-muted hover:text-chef-platinum"}`}
+                title="List View"
+                data-testid="diary-view-list"
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("calendar")}
+                className={`p-2 rounded-md transition-colors ${viewMode === "calendar" ? "bg-chef-teal/20 text-chef-teal" : "text-chef-muted hover:text-chef-platinum"}`}
+                title="Calendar View"
+                data-testid="diary-view-calendar"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
           
-          {/* View Toggle */}
-          <div className="ml-auto flex items-center gap-1 bg-chef-surface/60 border border-white/10 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-2 rounded-md transition-colors ${viewMode === "list" ? "bg-chef-teal/20 text-chef-teal" : "text-chef-muted hover:text-chef-platinum"}`}
-              title="List View"
-              data-testid="diary-view-list"
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("calendar")}
-              className={`p-2 rounded-md transition-colors ${viewMode === "calendar" ? "bg-chef-teal/20 text-chef-teal" : "text-chef-muted hover:text-chef-platinum"}`}
-              title="Calendar View"
-              data-testid="diary-view-calendar"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
+          {/* Filter Row */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-chef-muted/70 uppercase tracking-wider mr-1">Filter by:</span>
+            <MultiSelectFilterDropdown
+              label="Genre"
+              options={GENRE_OPTIONS}
+              selectedValues={filterGenres}
+              onChange={setFilterGenres}
+              testId="diary-filter-genre"
+            />
+            <MultiSelectFilterDropdown
+              label="Decade"
+              options={DECADE_OPTIONS}
+              selectedValues={filterDecades}
+              onChange={setFilterDecades}
+              testId="diary-filter-decade"
+            />
+            <MultiSelectFilterDropdown
+              label="Rating"
+              options={RATING_OPTIONS}
+              selectedValues={filterRatings}
+              onChange={setFilterRatings}
+              testId="diary-filter-rating"
+            />
+            {hasActiveFilters && (
+              <button
+                onClick={clearAllFilters}
+                className="text-[10px] text-chef-teal hover:text-chef-teal/80 ml-2"
+              >
+                Clear all ({totalActiveFilters})
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1120,12 +1247,12 @@ const DiaryTab = ({ onMovieClick }) => {
         ) : watchHistory.length > 0 ? (
           <div className="text-center py-16">
             <Filter className="w-10 h-10 text-chef-muted/20 mx-auto mb-3" />
-            <p className="text-sm text-chef-muted/50">No movies match your filter</p>
+            <p className="text-sm text-chef-muted/50">No movies match your filters</p>
             <button 
-              onClick={() => { setFilterGenre("all"); setFilterDecade("all"); setFilterRating("all"); }}
+              onClick={clearAllFilters}
               className="text-xs text-chef-teal hover:underline mt-2"
             >
-              Clear filters
+              Clear all filters
             </button>
           </div>
         ) : (
