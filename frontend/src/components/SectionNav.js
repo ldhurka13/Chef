@@ -3,11 +3,11 @@ import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 
 const sections = [
-  { id: "chefs-curation", label: "Chef's Curation", icon: Sparkles, isAI: true },
+  { id: "chefs-curation", label: "Chef's Special", icon: Sparkles, isAI: true },
+  { id: "explore", label: "Discover" },
   { id: "curated", label: "Your Bucketlist" },
   { id: "certified-swangy", label: "Trending Now" },
   { id: "all-time-classics", label: "All Time Classics" },
-  { id: "explore", label: "Discover" },
   { id: "marathon", label: "Marathon" },
 ];
 

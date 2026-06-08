@@ -1,6 +1,5 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Play } from "lucide-react";
 
 const HeroSection = ({ movie, loading, onMovieClick }) => {
   if (loading) {
@@ -22,8 +21,9 @@ const HeroSection = ({ movie, loading, onMovieClick }) => {
 
   return (
     <section 
-      className="relative min-h-[70vh] w-full overflow-hidden"
+      className="relative min-h-[70vh] w-full overflow-hidden cursor-pointer"
       data-testid="hero-section"
+      onClick={() => onMovieClick(movie)}
     >
       {/* Background Image */}
       <motion.div
@@ -76,31 +76,6 @@ const HeroSection = ({ movie, loading, onMovieClick }) => {
               {movie.overview}
             </p>
           )}
-
-          <div className="flex items-center gap-6">
-            <button
-              onClick={() => onMovieClick(movie)}
-              className="flex items-center gap-3 px-6 py-3 rounded-full bg-chef-platinum/10 
-                         backdrop-blur-sm border border-chef-platinum/20 
-                         hover:bg-chef-platinum/20 hover:border-chef-platinum/30
-                         transition-all duration-300 group"
-              data-testid="hero-view-details-btn"
-            >
-              <Play className="w-5 h-5 text-chef-platinum group-hover:text-chef-teal transition-colors" strokeWidth={1.5} />
-              <span className="text-sm tracking-wide">View Details</span>
-            </button>
-            
-            {movie.vote_average && (
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-serif text-chef-gold">
-                  {movie.vote_average.toFixed(1)}
-                </span>
-                <span className="text-xs text-chef-muted uppercase tracking-wide">
-                  TMDB
-                </span>
-              </div>
-            )}
-          </div>
 
           {movie.genres && movie.genres.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-6">
