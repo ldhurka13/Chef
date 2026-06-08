@@ -36,16 +36,16 @@ const WatchContextSelector = ({ value, onChange }) => {
 const VerticalSlider = ({ value, onChange, label, icon: Icon, lowLabel, highLabel, color }) => {
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* High Label */}
-      <span className="text-sm font-medium text-chef-muted/80">{highLabel}</span>
-      
       {/* Icon */}
       <div className={`p-3 rounded-full bg-white/5 ${color}`}>
         <Icon className="w-6 h-6" strokeWidth={1.5} />
       </div>
-      
+
+      {/* High Label */}
+      <span className="text-sm font-medium text-chef-muted/80">{highLabel}</span>
+    
       {/* Vertical Slider Track - Bigger and Wider */}
-      <div className="relative h-48 w-6 bg-white/10 rounded-full overflow-hidden shadow-inner">
+      <div className="relative h-48 w-8 bg-white/10 rounded-full overflow-hidden shadow-inner">
         {/* Fill */}
         <motion.div
           className={`absolute bottom-0 left-0 right-0 rounded-full ${
@@ -164,7 +164,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, onReset }) =>
                 label="Brain Power"
                 icon={Brain}
                 lowLabel="Zoned Out"
-                highLabel="Deep Focus"
+                highLabel="Locked In"
                 color="text-chef-teal"
               />
               
@@ -174,7 +174,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, onReset }) =>
                 label="Emotion"
                 icon={Smile}
                 lowLabel="Serious"
-                highLabel="Fun"
+                highLabel="Silly"
                 color="text-chef-gold"
               />
               
@@ -184,7 +184,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, onReset }) =>
                 label="Energy"
                 icon={Zap}
                 lowLabel="Exhausted"
-                highLabel="LFG"
+                highLabel="Energized"
                 color="text-chef-orange"
               />
             </div>

@@ -2405,18 +2405,18 @@ def _get_match_reason(source: str, genre_match: float, director_match: float, ac
     """Generate a human-readable reason for why this movie was recommended"""
     reasons = []
     
-    if in_watchlist:
-        reasons.append("On your watchlist")
     if director_match > 0.5:
         reasons.append("Director you love")
-    if genre_match > 0.5:
-        reasons.append("Your favorite genre")
     if actor_match > 0.3:
         reasons.append("Cast you enjoy")
     if source == "similar":
         reasons.append("Similar to movies you rated highly")
+    if genre_match > 0.3:
+        reasons.append("Your favorite genre")
     if source == "trending" and not reasons:
         reasons.append("Trending now")
+    if in_watchlist:
+        reasons.append("On your watchlist")
     
     if not reasons:
         reasons.append("Recommended for you")

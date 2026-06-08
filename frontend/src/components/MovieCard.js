@@ -62,6 +62,12 @@ const MovieCard = ({ movie, onClick, index }) => {
       <div className="absolute bottom-0 left-0 right-0 p-4">
         {/* Match Percentage and Watchlist Badges - Side by Side */}
         {(movie.match_percentage || movie.curated_score || movie.in_watchlist) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: isHovered ? 1 : 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="flex flex-wrap gap-1 mt-2"
+          >
           <div className="mb-2 flex items-center gap-2 flex-wrap">
             {(movie.match_percentage || movie.curated_score) && (
               <span className="inline-block px-2 py-1 rounded-full bg-chef-teal/20 
@@ -70,14 +76,8 @@ const MovieCard = ({ movie, onClick, index }) => {
                 {movie.curated_score ? `${Math.min(100, Math.round(movie.curated_score))}%` : `${movie.match_percentage}%`} Match
               </span>
             )}
-            {movie.in_watchlist && (
-              <span className="inline-block px-2 py-1 rounded-full bg-amber-500/20 
-                             text-amber-400 font-sans text-xs font-medium
-                             border border-amber-500/30">
-                Watchlist
-              </span>
-            )}
           </div>
+          </motion.div>
         )}
 
         {/* Title */}
@@ -98,7 +98,7 @@ const MovieCard = ({ movie, onClick, index }) => {
             transition={{ duration: 0.3, delay: 0.1 }}
             className="flex flex-wrap gap-1 mt-2"
           >
-            {movie.genres.slice(0, 2).map((genre, idx) => (
+            {movie.genres.slice(0, 3).map((genre, idx) => (
               <span
                 key={idx}
                 className="px-2 py-0.5 text-xs text-chef-muted bg-white/10 
