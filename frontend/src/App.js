@@ -25,6 +25,7 @@ import UserDetails from "./components/UserDetails";
 import ResetPassword from "./components/ResetPassword";
 import MyMoviesPage from "./components/MyMoviesPage";
 import MovieGame from "./components/MovieGame";
+import StarterLibraryOnboarding from "./components/StarterLibraryOnboarding";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -76,6 +77,11 @@ function AppContent() {
   const [locationPermissionOpen, setLocationPermissionOpen] = useState(false);
   const [pendingLoginData, setPendingLoginData] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  
+  // Onboarding state
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [isNewRegistration, setIsNewRegistration] = useState(false);
+  const [onboardingSessionDismissed, setOnboardingSessionDismissed] = useState(false);
   
   // Vibe parameters
   const [vibeParams, setVibeParams] = useState({
@@ -184,7 +190,7 @@ function AppContent() {
   }, [fetchSectionMovies]);
 
   // Auth functions
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     const token = localStorage.getItem("chef_token");
     if (token) {
       try {
@@ -202,7 +208,7 @@ function AppContent() {
         localStorage.removeItem("chef_token");
       }
     }
-  };
+  }, []);
 
   const handleLogin = async (email, password) => {
     setAuthLoading(true);
@@ -254,7 +260,10 @@ function AppContent() {
       setAuthUser(res.data.user);
       setAuthModalOpen(false);
       
-      // New user — always show location permission modal
+      // Mark as new registration for onboarding
+      setIsNewRegistration(true);
+      
+      // New user — always show location permission modal first
       setLocationPermissionOpen(true);
       
       toast.success(`Welcome to Chef, ${res.data.user.username}!`);
@@ -294,6 +303,12 @@ function AppContent() {
         console.error("Failed to update location permission:", error);
       }
     }
+    
+    // Show onboarding modal for new registrations
+    if (isNewRegistration) {
+      setOnboardingOpen(true);
+      setIsNewRegistration(false);
+    }
   };
 
   const handleLogout = () => {
@@ -314,6 +329,61 @@ function AppContent() {
       toast.success("Profile updated!");
     } catch (error) {
       toast.error("Failed to update profile");
+    }
+  };
+
+  // Check onboarding eligibility
+  const checkOnboardingEligibility = async () => {
+    const token = localStorage.getItem("chef_token");
+    if (!token) return null;
+    
+    try {
+      const res = await axios.get(`${API}/onboarding/eligibility`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.data;
+    } catch (error) {
+      console.error("Failed to check onboarding eligibility:", error);
+      return null;
+    }
+  };
+
+  // Request onboarding from child components (like MyMoviesPage)
+  const requestOnboarding = async () => {
+    if (onboardingSessionDismissed) return; // Don't re-open if already dismissed this session
+    
+    const eligibility = await checkOnboardingEligibility();
+    if (eligibility?.eligible) {
+      setOnboardingOpen(true);
+    }
+  };
+
+  // Handle onboarding close/skip
+  const handleOnboardingClose = () => {
+    setOnboardingOpen(false);
+    setOnboardingSessionDismissed(true); // Don't show again this session
+  };
+
+  // Handle onboarding complete (user added items)
+  const handleOnboardingComplete = () => {
+    setOnboardingOpen(false);
+    setOnboardingSessionDismissed(true);
+    // Refresh library data
+    refreshLibraryData();
+  };
+
+  // Refresh library data (diary, watchlist)
+  const refreshLibraryData = async () => {
+    const token = localStorage.getItem("chef_token");
+    if (!token) return;
+    
+    try {
+      const historyRes = await axios.get(`${API}/user/watch-history`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setWatchHistory(historyRes.data || []);
+    } catch (error) {
+      console.error("Failed to refresh library data:", error);
     }
   };
 
@@ -350,7 +420,7 @@ function AppContent() {
     };
     
     initializeData();
-  }, []);
+  }, [checkAuth, fetchSectionMovies]);
 
   // Discover movies based on vibe params
   const discoverMovies = useCallback(async (params) => {
@@ -619,6 +689,8 @@ function AppContent() {
                   user={authUser} 
                   onUserUpdate={(updated) => setAuthUser(updated)} 
                   onMovieClick={handleMovieClick}
+                  onRequestOnboarding={requestOnboarding}
+                  onRefreshLibrary={refreshLibraryData}
                 />
               }
             />
@@ -811,6 +883,15 @@ function AppContent() {
         user={authUser}
         watchHistory={watchHistory}
         onUpdateProfile={handleUpdateProfile}
+      />
+      
+      {/* Starter Library Onboarding Modal */}
+      <StarterLibraryOnboarding
+        isOpen={onboardingOpen}
+        onClose={handleOnboardingClose}
+        onComplete={handleOnboardingComplete}
+        user={authUser}
+        onRefreshLibrary={refreshLibraryData}
       />
       
       <Toaster 

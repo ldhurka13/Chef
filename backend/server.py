@@ -86,6 +86,10 @@ app = FastAPI(title="Chef - Movie Recommendation Engine")
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# Import and include modular routers
+from routers.onboarding import router as onboarding_router
+api_router.include_router(onboarding_router)
+
 # ============ MODELS ============
 
 class User(BaseModel):

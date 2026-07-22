@@ -662,7 +662,7 @@ const DiaryDetailModal = ({ movie, onClose, onMovieUpdated, onMovieRemoved }) =>
 };
 
 // ========== DIARY TAB ==========
-const DiaryTab = ({ onMovieClick }) => {
+const DiaryTab = ({ onMovieClick, onRefreshLibrary }) => {
   const debounceRef = useRef(null);
   const [watchHistory, setWatchHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1300,7 +1300,7 @@ const DiaryTab = ({ onMovieClick }) => {
 };
 
 // ========== WATCHLIST TAB ==========
-const WatchlistTab = ({ onMovieClick }) => {
+const WatchlistTab = ({ onMovieClick, onRefreshLibrary }) => {
   const debounceRef = useRef(null);
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1915,9 +1915,28 @@ const ProfileTab = ({ user, onUserUpdate }) => {
 };
 
 // ========== MAIN PAGE ==========
-const MyMoviesPage = ({ user, onUserUpdate, onMovieClick }) => {
+const MyMoviesPage = ({ user, onUserUpdate, onMovieClick, onRequestOnboarding, onRefreshLibrary }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("diary");
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  // Check onboarding eligibility when visiting Diary or Watchlist
+  useEffect(() => {
+    if (user && !onboardingChecked && (activeTab === "diary" || activeTab === "watchlist")) {
+      setOnboardingChecked(true);
+      // Request onboarding check from parent (App.js)
+      if (onRequestOnboarding) {
+        onRequestOnboarding();
+      }
+    }
+  }, [user, activeTab, onboardingChecked, onRequestOnboarding]);
+
+  // Reset onboarding check when navigating away and back
+  useEffect(() => {
+    return () => {
+      setOnboardingChecked(false);
+    };
+  }, []);
 
   if (!user) {
     return (
@@ -1977,8 +1996,8 @@ const MyMoviesPage = ({ user, onUserUpdate, onMovieClick }) => {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === "diary" && <DiaryTab onMovieClick={onMovieClick} />}
-            {activeTab === "watchlist" && <WatchlistTab onMovieClick={onMovieClick} />}
+            {activeTab === "diary" && <DiaryTab onMovieClick={onMovieClick} onRefreshLibrary={onRefreshLibrary} />}
+            {activeTab === "watchlist" && <WatchlistTab onMovieClick={onMovieClick} onRefreshLibrary={onRefreshLibrary} />}
             {activeTab === "profile" && <ProfileTab user={user} onUserUpdate={onUserUpdate} />}
           </motion.div>
         </AnimatePresence>
