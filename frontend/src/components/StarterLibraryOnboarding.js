@@ -9,13 +9,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { 
-  X, Upload, Film, Star, Loader2, Check, 
-  Sparkles, ArrowRight, RefreshCw, AlertCircle, Plus
+  X, Upload, Film, Star, Loader2, 
+  Sparkles, ArrowRight, RefreshCw, AlertCircle, Plus, Check
 } from "lucide-react";
 import { toast } from "sonner";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 const MINIMUM_MOVIES = 5;
+const VISIBLE_MOVIE_COUNT = 15; // Number of movies to show at once
 
 // Helper to get auth headers
 const authHeaders = () => {
@@ -23,62 +24,64 @@ const authHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Movie card for quick-add selection - Cleaner expanded card design
-const QuickAddMovieCard = ({ movie, onAdd, isAdding, isAdded }) => {
+// Movie card for quick-add selection
+const QuickAddMovieCard = ({ movie, onAdd, isAdding, onFadeComplete }) => {
   const [showRating, setShowRating] = useState(false);
   const [rating, setRating] = useState(7.0);
+  const [isExiting, setIsExiting] = useState(false);
   
   const handleAdd = async () => {
+    setIsExiting(true);
     await onAdd(movie, rating);
-    setShowRating(false);
+    // Callback to parent to replace this card
+    setTimeout(() => {
+      if (onFadeComplete) onFadeComplete(movie.id);
+    }, 300);
   };
   
   const releaseYear = movie.release_date ? movie.release_date.substring(0, 4) : "";
   const posterUrl = movie.poster_url || (movie.poster_path ? `https://image.tmdb.org/t/p/w185${movie.poster_path}` : null);
   
-  // Added state - compact checkmark overlay
-  if (isAdded) {
+  // Exiting state - fade out animation
+  if (isExiting) {
     return (
       <motion.div 
-        initial={{ scale: 0.95 }}
-        animate={{ scale: 1 }}
-        className="relative aspect-[2/3] rounded-xl overflow-hidden bg-gradient-to-br from-chef-teal/20 to-chef-teal/5 border border-chef-teal/40"
-        data-testid={`onboarding-movie-added-${movie.id}`}
+        initial={{ opacity: 1, scale: 1 }}
+        animate={{ opacity: 0, scale: 0.8 }}
+        transition={{ duration: 0.3 }}
+        className="relative aspect-[2/3] rounded-xl overflow-hidden"
+        data-testid={`onboarding-movie-exiting-${movie.id}`}
       >
         {posterUrl && (
-          <img src={posterUrl} alt={movie.title} className="w-full h-full object-cover opacity-30" />
+          <img src={posterUrl} alt={movie.title} className="w-full h-full object-cover" />
         )}
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
           <motion.div 
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ type: "spring", damping: 15 }}
-            className="flex flex-col items-center gap-1"
+            className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"
           >
-            <div className="w-10 h-10 rounded-full bg-chef-teal/30 flex items-center justify-center">
-              <Check className="w-5 h-5 text-chef-teal" />
-            </div>
-            <span className="text-[10px] text-chef-teal font-medium mt-1">Added</span>
+            <Check className="w-5 h-5 text-white" />
           </motion.div>
         </div>
       </motion.div>
     );
   }
   
-  // Rating popup expanded - cleaner design
+  // Rating popup - clean minimal design with grey tones
   if (showRating) {
     return (
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="relative aspect-[2/3] rounded-xl overflow-hidden bg-chef-surface border border-chef-teal/30 shadow-lg shadow-chef-teal/10"
+        className="relative aspect-[2/3] rounded-xl overflow-hidden bg-chef-surface border border-white/20 shadow-xl"
         data-testid={`onboarding-movie-rating-${movie.id}`}
       >
         {/* Background poster blur */}
         {posterUrl && (
           <div className="absolute inset-0">
-            <img src={posterUrl} alt="" className="w-full h-full object-cover opacity-20 blur-sm" />
+            <img src={posterUrl} alt="" className="w-full h-full object-cover opacity-15 blur-sm" />
           </div>
         )}
         
@@ -102,11 +105,11 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, isAdded }) => {
           {/* Rating display */}
           <div className="flex-1 flex flex-col justify-center">
             <div className="flex items-center justify-center gap-1.5 mb-3">
-              <Star className="w-5 h-5 text-chef-gold" fill="currentColor" />
-              <span className="text-2xl font-serif text-chef-gold">{rating.toFixed(1)}</span>
+              <Star className="w-5 h-5 text-chef-platinum" fill="currentColor" />
+              <span className="text-2xl font-serif text-chef-platinum">{rating.toFixed(1)}</span>
             </div>
             
-            {/* Slider */}
+            {/* Slider - grey/neutral styling */}
             <input
               type="range"
               min="0"
@@ -114,9 +117,9 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, isAdded }) => {
               step="0.5"
               value={rating}
               onChange={(e) => setRating(parseFloat(e.target.value))}
-              className="w-full h-1.5 rounded-full appearance-none bg-white/10 accent-chef-gold cursor-pointer"
+              className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, #d4af37 0%, #d4af37 ${rating * 10}%, rgba(255,255,255,0.1) ${rating * 10}%, rgba(255,255,255,0.1) 100%)`
+                background: `linear-gradient(to right, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.5) ${rating * 10}%, rgba(255,255,255,0.1) ${rating * 10}%, rgba(255,255,255,0.1) 100%)`
               }}
               aria-label="Rating slider"
             />
@@ -126,20 +129,17 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, isAdded }) => {
             </div>
           </div>
           
-          {/* Add button */}
+          {/* Add button - sleek minimal "+" design */}
           <button
             onClick={handleAdd}
             disabled={isAdding}
-            className="w-full py-2.5 rounded-lg bg-chef-teal/20 border border-chef-teal/40 text-chef-teal text-xs font-medium hover:bg-chef-teal/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5"
+            className="w-full py-2.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-chef-platinum disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
             data-testid={`onboarding-add-btn-${movie.id}`}
           >
             {isAdding ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              <>
-                <Plus className="w-3.5 h-3.5" />
-                Add to Diary
-              </>
+              <Plus className="w-5 h-5" strokeWidth={2} />
             )}
           </button>
         </div>
@@ -150,13 +150,18 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, isAdded }) => {
   // Default state - clickable card
   return (
     <motion.div 
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
+      transition={{ duration: 0.2 }}
       className="relative group cursor-pointer"
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       data-testid={`onboarding-movie-${movie.id}`}
     >
       <div 
-        className="aspect-[2/3] rounded-xl overflow-hidden bg-chef-surface/40 border border-white/10 group-hover:border-chef-teal/40 transition-all duration-200"
+        className="aspect-[2/3] rounded-xl overflow-hidden bg-chef-surface/40 border border-white/10 group-hover:border-white/30 transition-all duration-200"
         onClick={() => !isAdding && setShowRating(true)}
         role="button"
         tabIndex={0}
@@ -178,9 +183,9 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, isAdded }) => {
             {releaseYear && <p className="text-[10px] text-chef-muted mt-0.5">{releaseYear}</p>}
             
             {/* Quick add hint */}
-            <div className="mt-2 flex items-center gap-1.5 text-chef-teal">
+            <div className="mt-2 flex items-center gap-1.5 text-white/70">
               <Plus className="w-3 h-3" />
-              <span className="text-[10px] font-medium">Click to rate & add</span>
+              <span className="text-[10px] font-medium">Click to rate</span>
             </div>
           </div>
         </div>
@@ -197,7 +202,7 @@ const ProgressIndicator = ({ current, total }) => {
     <div className="flex items-center gap-3">
       <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
         <motion.div 
-          className="h-full bg-gradient-to-r from-chef-teal to-chef-gold rounded-full"
+          className="h-full bg-gradient-to-r from-white/40 to-white/60 rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${percentage}%` }}
           transition={{ duration: 0.5, ease: "easeOut" }}
@@ -218,10 +223,11 @@ const StarterLibraryOnboarding = ({
   user,
   onRefreshLibrary
 }) => {
-  const [movies, setMovies] = useState([]);
+  const [allMovies, setAllMovies] = useState([]); // Full pool of movies
+  const [visibleMovies, setVisibleMovies] = useState([]); // Currently displayed movies
   const [loadingMovies, setLoadingMovies] = useState(true);
   const [movieError, setMovieError] = useState(false);
-  const [addedMovies, setAddedMovies] = useState(new Set());
+  const [addedCount, setAddedCount] = useState(0);
   const [addingMovieId, setAddingMovieId] = useState(null);
   const [isSkipping, setIsSkipping] = useState(false);
   const [existingDiaryCount, setExistingDiaryCount] = useState(0);
@@ -234,13 +240,14 @@ const StarterLibraryOnboarding = ({
   const modalRef = useRef(null);
   
   // Total movies added (existing + new)
-  const totalMoviesAdded = existingDiaryCount + addedMovies.size;
+  const totalMoviesAdded = existingDiaryCount + addedCount;
   const moviesNeeded = Math.max(0, MINIMUM_MOVIES - totalMoviesAdded);
   
   // Fetch popular movies on mount
   const fetchMovies = useCallback(async () => {
     setLoadingMovies(true);
     setMovieError(false);
+    setAddedCount(0);
     
     try {
       // Get popular movies from onboarding endpoint
@@ -248,7 +255,7 @@ const StarterLibraryOnboarding = ({
         headers: authHeaders()
       });
       
-      const allMovies = res.data?.results || [];
+      const fetchedMovies = res.data?.results || [];
       
       // Get user's existing diary and watchlist to exclude
       const [diaryRes, watchlistRes, eligibilityRes] = await Promise.all([
@@ -266,9 +273,11 @@ const StarterLibraryOnboarding = ({
       ]);
       
       // Filter out existing movies
-      const filteredMovies = allMovies.filter(m => !existingIds.has(m.id));
+      const filteredMovies = fetchedMovies.filter(m => !existingIds.has(m.id));
       
-      setMovies(filteredMovies);
+      // Store all movies and set initial visible subset
+      setAllMovies(filteredMovies);
+      setVisibleMovies(filteredMovies.slice(0, VISIBLE_MOVIE_COUNT));
     } catch (err) {
       console.error("Failed to fetch movies:", err);
       setMovieError(true);
@@ -282,6 +291,31 @@ const StarterLibraryOnboarding = ({
       fetchMovies();
     }
   }, [isOpen, fetchMovies]);
+  
+  // Handle movie card fade complete - replace with new movie
+  const handleMovieFadeComplete = useCallback((movieId) => {
+    setVisibleMovies(prev => {
+      // Find index of the removed movie
+      const removedIndex = prev.findIndex(m => m.id === movieId);
+      if (removedIndex === -1) return prev;
+      
+      // Get IDs of currently visible movies
+      const visibleIds = new Set(prev.map(m => m.id));
+      
+      // Find next movie from pool that's not currently visible
+      const nextMovie = allMovies.find(m => !visibleIds.has(m.id) && m.id !== movieId);
+      
+      // Create new array without the removed movie
+      const newVisible = prev.filter(m => m.id !== movieId);
+      
+      // Add next movie if available
+      if (nextMovie) {
+        newVisible.push(nextMovie);
+      }
+      
+      return newVisible;
+    });
+  }, [allMovies]);
   
   // Handle escape key
   const handleSkip = useCallback(async () => {
@@ -326,10 +360,13 @@ const StarterLibraryOnboarding = ({
         comment: ""
       }, { headers: authHeaders() });
       
-      // Mark as added
-      setAddedMovies(prev => new Set([...prev, movie.id]));
+      // Update added count
+      setAddedCount(prev => prev + 1);
       
-      const newTotal = existingDiaryCount + addedMovies.size + 1;
+      // Remove from the pool so it doesn't reappear
+      setAllMovies(prev => prev.filter(m => m.id !== movie.id));
+      
+      const newTotal = existingDiaryCount + addedCount + 1;
       const remaining = Math.max(0, MINIMUM_MOVIES - newTotal);
       
       if (remaining > 0) {
@@ -421,7 +458,7 @@ const StarterLibraryOnboarding = ({
   
   // Handle done
   const handleDone = () => {
-    if (addedMovies.size > 0 && onComplete) {
+    if (addedCount > 0 && onComplete) {
       onComplete();
     }
     onClose();
@@ -458,7 +495,7 @@ const StarterLibraryOnboarding = ({
             <div className="flex items-start justify-between mb-3">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <Sparkles className="w-5 h-5 text-chef-gold" />
+                  <Sparkles className="w-5 h-5 text-chef-platinum" />
                   <h2 id="onboarding-title" className="font-serif text-xl text-chef-platinum">
                     Build your movie taste profile
                   </h2>
@@ -539,14 +576,14 @@ const StarterLibraryOnboarding = ({
             {/* Quick Add Movies Section */}
             <div>
               <h3 className="text-sm font-medium text-chef-platinum mb-4 flex items-center gap-2">
-                <Film className="w-4 h-4 text-chef-teal" />
+                <Film className="w-4 h-4 text-chef-muted" />
                 Popular movies you might have seen
               </h3>
               
               {loadingMovies ? (
                 // Loading skeleton
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                  {[...Array(15)].map((_, i) => (
+                  {[...Array(VISIBLE_MOVIE_COUNT)].map((_, i) => (
                     <div key={i} className="aspect-[2/3] rounded-xl bg-chef-surface/40 animate-pulse" />
                   ))}
                 </div>
@@ -563,7 +600,7 @@ const StarterLibraryOnboarding = ({
                     Try again
                   </button>
                 </div>
-              ) : movies.length === 0 ? (
+              ) : visibleMovies.length === 0 ? (
                 // No movies available
                 <div className="text-center py-8">
                   <Film className="w-8 h-8 text-chef-muted/30 mx-auto mb-2" />
@@ -571,17 +608,19 @@ const StarterLibraryOnboarding = ({
                   <p className="text-xs text-chef-muted/60">Try the Letterboxd import above</p>
                 </div>
               ) : (
-                // Movie grid - larger cards with 5 columns
+                // Movie grid with AnimatePresence for smooth transitions
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                  {movies.map((movie) => (
-                    <QuickAddMovieCard
-                      key={movie.id}
-                      movie={movie}
-                      onAdd={handleAddMovie}
-                      isAdding={addingMovieId === movie.id}
-                      isAdded={addedMovies.has(movie.id)}
-                    />
-                  ))}
+                  <AnimatePresence mode="popLayout">
+                    {visibleMovies.map((movie) => (
+                      <QuickAddMovieCard
+                        key={movie.id}
+                        movie={movie}
+                        onAdd={handleAddMovie}
+                        isAdding={addingMovieId === movie.id}
+                        onFadeComplete={handleMovieFadeComplete}
+                      />
+                    ))}
+                  </AnimatePresence>
                 </div>
               )}
             </div>
@@ -600,16 +639,16 @@ const StarterLibraryOnboarding = ({
               </button>
               
               <div className="flex items-center gap-3">
-                {addedMovies.size > 0 && (
-                  <span className="text-xs text-chef-teal">
-                    +{addedMovies.size} movie{addedMovies.size !== 1 ? "s" : ""} added
+                {addedCount > 0 && (
+                  <span className="text-xs text-chef-muted">
+                    +{addedCount} movie{addedCount !== 1 ? "s" : ""} added
                   </span>
                 )}
                 <button
                   onClick={handleDone}
                   className={`px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                     hasReachedMinimum 
-                      ? "bg-chef-teal/30 border border-chef-teal/50 text-chef-teal hover:bg-chef-teal/40" 
+                      ? "bg-white/20 border border-white/30 text-chef-platinum hover:bg-white/30" 
                       : "bg-chef-surface border border-white/10 text-chef-platinum hover:bg-white/10"
                   }`}
                   data-testid="onboarding-done-btn"
