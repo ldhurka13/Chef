@@ -247,3 +247,33 @@ Build a context-aware movie recommendation engine called "Chef" with:
    - Timeline indicator showing current position
 5. **Replaced Source filter with Genre, Decade, Rating filters** - Improved filtering options in Diary tab
 6. **Watchlist items now clickable** - Opens movie detail modal when clicking on watchlist items
+
+## Session Notes (July 2026) - Starter Library Onboarding
+
+### New Feature: Starter Library Onboarding
+A persistent onboarding flow to collect initial movie taste data from new users:
+
+**Backend (`/app/backend/routers/onboarding.py`, `/app/backend/services/onboarding_service.py`):**
+- `GET /api/onboarding/eligibility` - Check if user has < 5 diary entries (minimum required for personalization)
+- `GET /api/onboarding/popular-movies` - Returns 30 TMDB popular + top-rated movies for quick-add
+- `POST /api/onboarding/skip` - Persists skip but doesn't prevent re-prompting if still < 5 movies
+- `POST /api/onboarding/complete` - Marks onboarding as completed after user adds movies
+
+**Frontend (`/app/frontend/src/components/StarterLibraryOnboarding.js`):**
+- Modal triggers after new registration OR when visiting /my-movies with < 5 diary entries
+- Shows progress bar (X / 5 movies) tracking user's progress toward minimum
+- Displays 30 popular movies grid with clean card design
+- Movie card click expands to show rating popup with 0-10 slider (0.5 step)
+- "Added" state shows checkmark overlay on added movies
+- Toast notifications show "X more to go" countdown
+- Letterboxd import option for instant bulk import
+- Skip button dismisses modal but re-appears on next visit if still < 5 movies
+
+**Key Technical Details:**
+- Minimum diary count threshold: 5 (defined in `MINIMUM_DIARY_COUNT`)
+- Popular movies endpoint combines TMDB `/movie/popular` (3 pages) + `/movie/top_rated`
+- Duplicates removed by ID, user's existing diary/watchlist filtered out client-side
+- Progress indicator updates live as movies are added
+- Session-level dismissal prevents modal spam during single session
+
+**Testing:** 100% pass rate (15 backend tests + full frontend E2E verification)
