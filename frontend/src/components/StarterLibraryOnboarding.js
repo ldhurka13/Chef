@@ -5,7 +5,7 @@
  * Shows after successful registration and re-prompts if user has < 5 diary entries.
  * Uses TMDB Popular movies with infinite scroll for better variety.
  */
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { 
@@ -24,8 +24,8 @@ const authHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Movie card for quick-add selection
-const QuickAddMovieCard = ({ movie, onAdd, isAdding, onFadeComplete }) => {
+// Movie card for quick-add selection - memoized to prevent unnecessary re-renders
+const QuickAddMovieCard = memo(({ movie, onAdd, isAdding, onFadeComplete }) => {
   const [showRating, setShowRating] = useState(false);
   const [rating, setRating] = useState(7.0);
   const [isExiting, setIsExiting] = useState(false);
@@ -45,36 +45,27 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, onFadeComplete }) => {
   // Exiting state - fade out animation
   if (isExiting) {
     return (
-      <motion.div 
-        initial={{ opacity: 1, scale: 1 }}
-        animate={{ opacity: 0, scale: 0.8 }}
-        transition={{ duration: 0.3 }}
-        className="relative aspect-[2/3] rounded-xl overflow-hidden"
+      <div 
+        className="relative aspect-[2/3] rounded-xl overflow-hidden animate-fade-out"
         data-testid={`onboarding-movie-exiting-${movie.id}`}
+        style={{ animation: 'fadeOut 0.3s ease-out forwards' }}
       >
         {posterUrl && (
           <img src={posterUrl} alt={movie.title} className="w-full h-full object-cover" />
         )}
         <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-          <motion.div 
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"
-          >
+          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
             <Check className="w-5 h-5 text-white" />
-          </motion.div>
+          </div>
         </div>
-      </motion.div>
+      </div>
     );
   }
   
   // Rating popup - clean minimal design with grey tones
   if (showRating) {
     return (
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+      <div
         className="relative aspect-[2/3] rounded-xl overflow-hidden bg-chef-surface border border-white/20 shadow-xl"
         data-testid={`onboarding-movie-rating-${movie.id}`}
       >
@@ -143,21 +134,14 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, onFadeComplete }) => {
             )}
           </button>
         </div>
-      </motion.div>
+      </div>
     );
   }
   
-  // Default state - clickable card
+  // Default state - clickable card (no motion animations to prevent flickering)
   return (
-    <motion.div 
-      layout
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.8 }}
-      transition={{ duration: 0.2 }}
-      className="relative group cursor-pointer"
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+    <div 
+      className="relative group cursor-pointer transition-transform duration-150 hover:scale-[1.02] active:scale-[0.98]"
       data-testid={`onboarding-movie-${movie.id}`}
     >
       <div 
@@ -190,9 +174,11 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, onFadeComplete }) => {
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
-};
+});
+
+QuickAddMovieCard.displayName = 'QuickAddMovieCard';
 
 // Progress indicator component
 const ProgressIndicator = ({ current, total }) => {
@@ -201,11 +187,9 @@ const ProgressIndicator = ({ current, total }) => {
   return (
     <div className="flex items-center gap-3">
       <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-        <motion.div 
-          className="h-full bg-gradient-to-r from-white/40 to-white/60 rounded-full"
-          initial={{ width: 0 }}
-          animate={{ width: `${percentage}%` }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+        <div 
+          className="h-full bg-gradient-to-r from-white/40 to-white/60 rounded-full transition-all duration-500 ease-out"
+          style={{ width: `${percentage}%` }}
         />
       </div>
       <span className="text-xs text-chef-muted whitespace-nowrap">
@@ -244,6 +228,7 @@ const StarterLibraryOnboarding = ({
   const modalRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const loadMoreTriggerRef = useRef(null);
+  const isFetchingRef = useRef(false); // Prevent duplicate fetches
   
   // Total movies added (existing + new)
   const totalMoviesAdded = existingDiaryCount + addedCount;
@@ -272,14 +257,21 @@ const StarterLibraryOnboarding = ({
     }
   }, []);
   
-  // Fetch movies with pagination
-  const fetchMovies = useCallback(async (page = 1, existingIds = existingMovieIds) => {
+  // Fetch movies with pagination - using ref to prevent race conditions
+  const fetchMovies = useCallback(async (page = 1, existingIds = null) => {
+    // Prevent duplicate fetches
+    if (isFetchingRef.current && page > 1) return;
+    isFetchingRef.current = true;
+    
+    const idsToUse = existingIds || existingMovieIds;
+    
     if (page === 1) {
       setLoadingMovies(true);
       setMovieError(false);
       setAddedCount(0);
       setAddedMovieIds(new Set());
       setVisibleMovies([]);
+      setCurrentPage(1);
     } else {
       setLoadingMore(true);
     }
@@ -293,22 +285,23 @@ const StarterLibraryOnboarding = ({
       const fetchedMovies = res.data?.results || [];
       const hasMoreMovies = res.data?.has_more ?? false;
       
-      // Filter out user's existing movies
-      const filteredMovies = fetchedMovies.filter(m => !existingIds.has(m.id));
+      // Filter out user's existing movies and already added movies
+      const filteredMovies = fetchedMovies.filter(m => !idsToUse.has(m.id));
       
       if (page === 1) {
         setVisibleMovies(filteredMovies);
+        setCurrentPage(1);
       } else {
         setVisibleMovies(prev => {
-          // Avoid duplicates
+          // Avoid duplicates by checking existing IDs
           const existingVisibleIds = new Set(prev.map(m => m.id));
           const newMovies = filteredMovies.filter(m => !existingVisibleIds.has(m.id));
           return [...prev, ...newMovies];
         });
+        setCurrentPage(page);
       }
       
       setHasMore(hasMoreMovies);
-      setCurrentPage(page);
     } catch (err) {
       console.error("Failed to fetch movies:", err);
       if (page === 1) {
@@ -317,12 +310,15 @@ const StarterLibraryOnboarding = ({
     } finally {
       setLoadingMovies(false);
       setLoadingMore(false);
+      isFetchingRef.current = false;
     }
   }, [existingMovieIds]);
   
   // Initialize on open
   useEffect(() => {
     if (isOpen) {
+      // Reset state when opening
+      isFetchingRef.current = false;
       const init = async () => {
         const existingIds = await fetchInitialData();
         await fetchMovies(1, existingIds);
@@ -331,26 +327,30 @@ const StarterLibraryOnboarding = ({
     }
   }, [isOpen, fetchInitialData, fetchMovies]);
   
-  // Infinite scroll using Intersection Observer
+  // Infinite scroll using Intersection Observer - with debounce
   useEffect(() => {
     if (!loadMoreTriggerRef.current || !hasMore || loadingMore || loadingMovies) return;
     
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !isFetchingRef.current) {
           fetchMovies(currentPage + 1);
         }
       },
       { 
         root: scrollContainerRef.current,
-        rootMargin: '100px',
+        rootMargin: '200px',
         threshold: 0.1 
       }
     );
     
-    observer.observe(loadMoreTriggerRef.current);
+    const trigger = loadMoreTriggerRef.current;
+    observer.observe(trigger);
     
-    return () => observer.disconnect();
+    return () => {
+      if (trigger) observer.unobserve(trigger);
+      observer.disconnect();
+    };
   }, [hasMore, loadingMore, loadingMovies, currentPage, fetchMovies]);
   
   // Handle movie card fade complete - just remove from visible list
@@ -383,7 +383,7 @@ const StarterLibraryOnboarding = ({
   }, [isOpen, handleSkip]);
   
   // Handle adding a movie to diary
-  const handleAddMovie = async (movie, rating) => {
+  const handleAddMovie = useCallback(async (movie, rating) => {
     if (addingMovieId) return;
     
     setAddingMovieId(movie.id);
@@ -434,7 +434,7 @@ const StarterLibraryOnboarding = ({
     } finally {
       setAddingMovieId(null);
     }
-  };
+  }, [addingMovieId, existingDiaryCount, addedCount, onRefreshLibrary]);
   
   // Handle Letterboxd file import
   const handleLetterboxdImport = async (e) => {
@@ -629,7 +629,7 @@ const StarterLibraryOnboarding = ({
                 // Loading skeleton
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
                   {[...Array(MOVIES_PER_PAGE)].map((_, i) => (
-                    <div key={i} className="aspect-[2/3] rounded-xl bg-chef-surface/40 animate-pulse" />
+                    <div key={`skeleton-${i}`} className="aspect-[2/3] rounded-xl bg-chef-surface/40 animate-pulse" />
                   ))}
                 </div>
               ) : movieError ? (
@@ -654,19 +654,17 @@ const StarterLibraryOnboarding = ({
                 </div>
               ) : (
                 <>
-                  {/* Movie grid with AnimatePresence for smooth transitions */}
+                  {/* Movie grid - simple grid without AnimatePresence to prevent flickering */}
                   <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                    <AnimatePresence mode="popLayout">
-                      {visibleMovies.map((movie) => (
-                        <QuickAddMovieCard
-                          key={movie.id}
-                          movie={movie}
-                          onAdd={handleAddMovie}
-                          isAdding={addingMovieId === movie.id}
-                          onFadeComplete={handleMovieFadeComplete}
-                        />
-                      ))}
-                    </AnimatePresence>
+                    {visibleMovies.map((movie) => (
+                      <QuickAddMovieCard
+                        key={movie.id}
+                        movie={movie}
+                        onAdd={handleAddMovie}
+                        isAdding={addingMovieId === movie.id}
+                        onFadeComplete={handleMovieFadeComplete}
+                      />
+                    ))}
                   </div>
                   
                   {/* Load more trigger / Loading indicator */}

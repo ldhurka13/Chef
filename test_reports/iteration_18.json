@@ -1,0 +1,71 @@
+{
+  "summary": "Regression testing of the Starter Library Onboarding infinite-scroll flicker fix. The applied visual fixes (React.memo, removal of AnimatePresence/layout props, CSS-only transitions/fade-out keyframe, isFetchingRef guard) ARE present in code. However, testing uncovered a CRITICAL root-cause bug that the previous fixes only masked visually: an infinite useEffect loop is firing ~12 times/second while the modal is open. In a 12-second observation window, /api/onboarding/popular-movies?page=1 was called 143 times, /api/user/watch-history 120x, /api/onboarding/eligibility 117x, /api/user/watchlist 116x (496 requests total). This causes visibleMovies to reset repeatedly, addedCount to reset to 0, cards to unmount/re-mount (Playwright reported 'element detached from DOM, retrying' 9x on a simple click), and progress bar to flicker between values (screenshots show '4 / 5 movies' → '0 / 5 movies' transitions). It also floods TMDB with requests, triggering 429 rate-limits (repro'd in test run 1). React.memo + CSS fade only reduces per-card re-render cost; the modal itself is still re-invoking data fetches in a tight loop.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/onboarding/popular-movies", "issue": "No server-side throttling — infinite-loop bug on frontend triggered ~12 req/s, cascading into TMDB 429 rate-limits that broke the whole page. Consider a per-user rate-limit or short-cache to be resilient to client bugs."}
+    ]
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StarterLibraryOnboarding.js", "issue": "INFINITE useEffect LOOP: 143 duplicate calls to /api/onboarding/popular-movies?page=1 in 12s while modal is open. Cards get unmounted/remounted continuously, visibleMovies is reset to [] repeatedly, addedCount is reset to 0, progress bar flickers between values. This is the ROOT CAUSE of the reported flickering — the memo/CSS-transition fixes only reduced visible symptoms.", "selector": "[data-testid=\"onboarding-modal-backdrop\"]", "priority": "CRITICAL"},
+      {"component": "StarterLibraryOnboarding.js", "issue": "Clicking a movie card is extremely flaky: Playwright reports 'element detached from DOM, retrying' 9 times over 30s (matching the 12/s re-render cycle). Real users may need multiple clicks or see the rating popup close spontaneously.", "selector": "[data-testid^=\"onboarding-movie-\"]", "priority": "HIGH"},
+      {"component": "StarterLibraryOnboarding.js", "issue": "Infinite scroll appears non-functional in this build — scrolling to the bottom of the modal did NOT load additional movies past the initial 15/page (cards count stayed at 12 or went to 0 on scroll). The IntersectionObserver may be re-created every render due to the same loop, preventing has_more pagination from advancing.", "selector": "loadMoreTriggerRef", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Onboarding modal open on /my-movies", "issue": "Modal triggers a fetch storm (~12 req/s) to popular-movies, eligibility, watch-history, watchlist endpoints. Cascades into TMDB 429s and can leave popular-movies empty for the user during rate-limit windows.", "affected_selectors": ["[data-testid=\"onboarding-modal-backdrop\"]"]}
+    ],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Login flow (email/password) works via 'Log In' → Welcome Back dialog",
+    "/my-movies route renders and triggers onboarding modal for user with diary_count < 5",
+    "Modal shows title, progress '4 / 5 movies', Letterboxd import, and popular movies grid",
+    "12–15 movie cards eventually render with poster images (Spider-Man BND, Odyssey, Supergirl, etc.)",
+    "Modal-scroll CLS in a single steady frame was 0.011 (low), meaning per-frame card re-render is smooth — memoization is effective at that level",
+    "CSS keyframe 'fadeOut' present in index.css and applied via .animate-fade-out",
+    "React.memo(QuickAddMovieCard), removal of AnimatePresence mode='popLayout', and removal of 'layout' prop are all confirmed in code",
+    "isFetchingRef guard exists to prevent duplicate paginated fetches (page > 1)"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_starter_library_onboarding.py (from prev iteration, still valid)"
+  ],
+
+  "action_items": [
+    "CRITICAL: Fix infinite useEffect loop in /app/frontend/src/components/StarterLibraryOnboarding.js. Root cause analysis below.",
+    "Root cause: useEffect on line ~318 has deps [isOpen, fetchInitialData, fetchMovies]. `fetchMovies = useCallback(..., [existingMovieIds])`. Inside the effect, `fetchInitialData()` calls `setExistingMovieIds(new Set([...]))` on every invocation — a NEW Set reference each time. This changes `existingMovieIds` state → recreates `fetchMovies` callback → useEffect re-runs → calls fetchInitialData again → …",
+    "Recommended fix (pick one): (a) change useEffect deps to `[isOpen]` only (and disable exhaustive-deps warning for that line since the callbacks are stable enough for our purposes), OR (b) drop `existingMovieIds` from fetchMovies useCallback deps and read it via a ref (existingIdsRef.current) instead, OR (c) in fetchInitialData, only call setExistingMovieIds if the ID set actually changed (compare contents, not reference).",
+    "Also verify IntersectionObserver isn't leaking / never firing because of the same re-run loop. Once the loop is fixed, retest scroll-to-load-more with a user who has 0 diary entries so all 126 movies from paginated endpoint are visible.",
+    "Consider adding server-side rate limiting/caching on /api/onboarding/popular-movies so a client bug can't ddos TMDB."
+  ],
+
+  "critical_code_review_comments": [
+    "StarterLibraryOnboarding.js:315 — fetchMovies = useCallback(..., [existingMovieIds]) is unstable because existingMovieIds is a Set that gets replaced with a fresh instance on every fetchInitialData call. Combined with useEffect deps including fetchMovies, this guarantees a re-render/re-fetch loop.",
+    "StarterLibraryOnboarding.js:328 — useEffect deps `[isOpen, fetchInitialData, fetchMovies]` should be `[isOpen]`. The current form defeats the intent of the isFetchingRef guard because fetchMovies(1) branch does NOT check the ref (only page > 1 does — line 263).",
+    "isFetchingRef check on line 263 only prevents duplicate fetches when page > 1; page=1 path is unguarded, so the infinite loop freely re-runs the initial fetch.",
+    "IntersectionObserver in the infinite-scroll useEffect (line ~332) has deps `[hasMore, loadingMore, loadingMovies, currentPage, fetchMovies]` — including the unstable fetchMovies. Every state churn from the loop tears down and re-creates the observer, potentially never letting it fire on scroll.",
+    "Server request storm (496 requests in 12s from a single client) will hit TMDB rate limits (already reproduced 429 flood). Recommend either short-lived server cache (30–60s) on /api/onboarding/popular-movies?page=X per user or per-IP rate limit."
+  ],
+
+  "updated_files": [],
+
+  "success_rate": {
+    "backend": "100% (endpoints functional — validated via curl; not re-run pytest as backend unchanged)",
+    "frontend": "40% (visuals partially improved by memo/CSS, but underlying render loop still present and observable)"
+  },
+
+  "test_credentials": "vibetest2@example.com / Test123! (from /app/memory/test_credentials.md). User now has 4 diary entries (was 3) — still eligible since <5.",
+
+  "seed_data_creation": "None. No new movies added because clicking a card was blocked by DOM-detachment retries.",
+
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "The visual flicker fix (React.memo, remove AnimatePresence popLayout/layout, CSS keyframe fadeOut, isFetchingRef) IS in place per code review, but a deeper bug still causes the modal to re-fetch data ~12x/sec. Confirm by monitoring `page.on('request', ...)` for /api/onboarding/popular-movies calls when the modal is open — expect exactly 1 (or 2 in React StrictMode dev). If you see >5, the loop is still present. Root cause: unstable fetchMovies useCallback due to `existingMovieIds` (Set) dependency + useEffect including fetchMovies in deps. Recommended fix outlined in action_items. Test user vibetest2 has 4/5 diary entries; to reset, delete movies via /api/user/watch-history. Rating popup could not be tested end-to-end due to DOM detachment from the loop — retest after fix.",
+
+  "rca of the issue": "Infinite useEffect re-run loop. Sequence: (1) Modal opens, (2) useEffect fires with deps [isOpen, fetchInitialData, fetchMovies], (3) init() calls fetchInitialData which calls setExistingMovieIds(new Set([...tmdb_ids])), (4) React re-renders because existingMovieIds identity changed, (5) fetchMovies useCallback deps [existingMovieIds] triggers new function identity, (6) useEffect dep array changed → effect re-runs → back to step 3. The loop runs at ~12Hz because each cycle awaits 4 parallel HTTP requests. Observed impact: 143 popular-movies calls, 120 watch-history calls, 117 eligibility calls, 116 watchlist calls in a 12-second window; cards unmount/remount continuously; addedCount and visibleMovies reset; progress bar flickers between 4/5 and 0/5; user click on card intermittently fails because target detaches mid-click; TMDB returns 429 under this load, breaking the modal entirely. Reproduction: login → navigate to /my-movies → open devtools Network tab filtered to '/api/onboarding' → observe repeated identical requests. Mitigation: see action_items."
+}
