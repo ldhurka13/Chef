@@ -207,18 +207,16 @@ const StarterLibraryOnboarding = ({
   user,
   onRefreshLibrary
 }) => {
-  const [visibleMovies, setVisibleMovies] = useState([]); // Currently displayed movies
+  const [visibleMovies, setVisibleMovies] = useState([]);
   const [loadingMovies, setLoadingMovies] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [movieError, setMovieError] = useState(false);
   const [addedCount, setAddedCount] = useState(0);
-  const [addedMovieIds, setAddedMovieIds] = useState(new Set()); // Track added movie IDs
   const [addingMovieId, setAddingMovieId] = useState(null);
   const [isSkipping, setIsSkipping] = useState(false);
   const [existingDiaryCount, setExistingDiaryCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [existingMovieIds, setExistingMovieIds] = useState(new Set()); // User's diary + watchlist
   
   // Letterboxd import state
   const [isImporting, setIsImporting] = useState(false);
@@ -228,50 +226,25 @@ const StarterLibraryOnboarding = ({
   const modalRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const loadMoreTriggerRef = useRef(null);
-  const isFetchingRef = useRef(false); // Prevent duplicate fetches
+  
+  // Use refs for values that shouldn't trigger re-renders when used in callbacks
+  const existingIdsRef = useRef(new Set());
+  const isFetchingRef = useRef(false);
+  const isInitializedRef = useRef(false);
+  const currentPageRef = useRef(1);
   
   // Total movies added (existing + new)
   const totalMoviesAdded = existingDiaryCount + addedCount;
   
-  // Fetch initial data (user's existing movies for exclusion)
-  const fetchInitialData = useCallback(async () => {
-    try {
-      const [diaryRes, watchlistRes, eligibilityRes] = await Promise.all([
-        axios.get(`${API}/api/user/watch-history`, { headers: authHeaders() }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/user/watchlist`, { headers: authHeaders() }).catch(() => ({ data: [] })),
-        axios.get(`${API}/api/onboarding/eligibility`, { headers: authHeaders() }).catch(() => ({ data: { diary_count: 0 } }))
-      ]);
-      
-      setExistingDiaryCount(eligibilityRes.data?.diary_count || 0);
-      
-      const existingIds = new Set([
-        ...(diaryRes.data || []).map(m => m.tmdb_id),
-        ...(watchlistRes.data || []).map(m => m.tmdb_id)
-      ]);
-      
-      setExistingMovieIds(existingIds);
-      return existingIds;
-    } catch (err) {
-      console.error("Failed to fetch initial data:", err);
-      return new Set();
-    }
-  }, []);
-  
-  // Fetch movies with pagination - using ref to prevent race conditions
-  const fetchMovies = useCallback(async (page = 1, existingIds = null) => {
+  // Fetch movies - stable callback that reads from refs
+  const fetchMovies = useCallback(async (page = 1) => {
     // Prevent duplicate fetches
-    if (isFetchingRef.current && page > 1) return;
+    if (isFetchingRef.current) return;
     isFetchingRef.current = true;
-    
-    const idsToUse = existingIds || existingMovieIds;
     
     if (page === 1) {
       setLoadingMovies(true);
       setMovieError(false);
-      setAddedCount(0);
-      setAddedMovieIds(new Set());
-      setVisibleMovies([]);
-      setCurrentPage(1);
     } else {
       setLoadingMore(true);
     }
@@ -285,22 +258,22 @@ const StarterLibraryOnboarding = ({
       const fetchedMovies = res.data?.results || [];
       const hasMoreMovies = res.data?.has_more ?? false;
       
-      // Filter out user's existing movies and already added movies
-      const filteredMovies = fetchedMovies.filter(m => !idsToUse.has(m.id));
+      // Filter out user's existing movies using ref
+      const existingIds = existingIdsRef.current;
+      const filteredMovies = fetchedMovies.filter(m => !existingIds.has(m.id));
       
       if (page === 1) {
         setVisibleMovies(filteredMovies);
-        setCurrentPage(1);
       } else {
         setVisibleMovies(prev => {
-          // Avoid duplicates by checking existing IDs
           const existingVisibleIds = new Set(prev.map(m => m.id));
           const newMovies = filteredMovies.filter(m => !existingVisibleIds.has(m.id));
           return [...prev, ...newMovies];
         });
-        setCurrentPage(page);
       }
       
+      setCurrentPage(page);
+      currentPageRef.current = page;
       setHasMore(hasMoreMovies);
     } catch (err) {
       console.error("Failed to fetch movies:", err);
@@ -312,48 +285,84 @@ const StarterLibraryOnboarding = ({
       setLoadingMore(false);
       isFetchingRef.current = false;
     }
-  }, [existingMovieIds]);
+  }, []); // No dependencies - uses refs
   
-  // Initialize on open
+  // Initialize data when modal opens - only runs once per open
   useEffect(() => {
-    if (isOpen) {
-      // Reset state when opening
-      isFetchingRef.current = false;
-      const init = async () => {
-        const existingIds = await fetchInitialData();
-        await fetchMovies(1, existingIds);
-      };
-      init();
+    if (!isOpen) {
+      // Reset initialization flag when modal closes
+      isInitializedRef.current = false;
+      return;
     }
-  }, [isOpen, fetchInitialData, fetchMovies]);
+    
+    // Prevent double initialization
+    if (isInitializedRef.current) return;
+    isInitializedRef.current = true;
+    
+    const initializeData = async () => {
+      // Reset state
+      setAddedCount(0);
+      setVisibleMovies([]);
+      setCurrentPage(1);
+      currentPageRef.current = 1;
+      isFetchingRef.current = false;
+      
+      try {
+        // Fetch user's existing movies for exclusion
+        const [diaryRes, watchlistRes, eligibilityRes] = await Promise.all([
+          axios.get(`${API}/api/user/watch-history`, { headers: authHeaders() }).catch(() => ({ data: [] })),
+          axios.get(`${API}/api/user/watchlist`, { headers: authHeaders() }).catch(() => ({ data: [] })),
+          axios.get(`${API}/api/onboarding/eligibility`, { headers: authHeaders() }).catch(() => ({ data: { diary_count: 0 } }))
+        ]);
+        
+        setExistingDiaryCount(eligibilityRes.data?.diary_count || 0);
+        
+        // Store existing IDs in ref (not state) to avoid re-renders
+        existingIdsRef.current = new Set([
+          ...(diaryRes.data || []).map(m => m.tmdb_id),
+          ...(watchlistRes.data || []).map(m => m.tmdb_id)
+        ]);
+        
+        // Now fetch movies
+        await fetchMovies(1);
+      } catch (err) {
+        console.error("Failed to initialize:", err);
+        setMovieError(true);
+        setLoadingMovies(false);
+      }
+    };
+    
+    initializeData();
+  }, [isOpen, fetchMovies]);
   
-  // Infinite scroll using Intersection Observer - with debounce
+  // Infinite scroll using Intersection Observer
   useEffect(() => {
-    if (!loadMoreTriggerRef.current || !hasMore || loadingMore || loadingMovies) return;
+    const trigger = loadMoreTriggerRef.current;
+    const container = scrollContainerRef.current;
+    
+    if (!trigger || !container || !hasMore || loadingMore || loadingMovies) return;
     
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && !isFetchingRef.current) {
-          fetchMovies(currentPage + 1);
+        if (entries[0].isIntersecting && !isFetchingRef.current) {
+          fetchMovies(currentPageRef.current + 1);
         }
       },
       { 
-        root: scrollContainerRef.current,
+        root: container,
         rootMargin: '200px',
         threshold: 0.1 
       }
     );
     
-    const trigger = loadMoreTriggerRef.current;
     observer.observe(trigger);
     
     return () => {
-      if (trigger) observer.unobserve(trigger);
       observer.disconnect();
     };
-  }, [hasMore, loadingMore, loadingMovies, currentPage, fetchMovies]);
+  }, [hasMore, loadingMore, loadingMovies, fetchMovies]);
   
-  // Handle movie card fade complete - just remove from visible list
+  // Handle movie card fade complete
   const handleMovieFadeComplete = useCallback((movieId) => {
     setVisibleMovies(prev => prev.filter(m => m.id !== movieId));
   }, []);
@@ -401,12 +410,11 @@ const StarterLibraryOnboarding = ({
         comment: ""
       }, { headers: authHeaders() });
       
-      // Update added count and track this movie
+      // Update added count
       setAddedCount(prev => prev + 1);
-      setAddedMovieIds(prev => new Set([...prev, movie.id]));
       
-      // Also add to existing IDs so it doesn't show up in future pages
-      setExistingMovieIds(prev => new Set([...prev, movie.id]));
+      // Add to existing IDs ref so it doesn't show up in future pages
+      existingIdsRef.current.add(movie.id);
       
       const newTotal = existingDiaryCount + addedCount + 1;
       const remaining = Math.max(0, MINIMUM_MOVIES - newTotal);
@@ -467,14 +475,12 @@ const StarterLibraryOnboarding = ({
       if (imported > 0 || watchlist_added > 0) {
         toast.success(`Imported ${imported} diary entries and ${watchlist_added} watchlist items!`);
         
-        // Mark onboarding as completed
         try {
           await axios.post(`${API}/api/onboarding/complete`, {}, { headers: authHeaders() });
         } catch (e) {
           // Non-critical
         }
         
-        // Refresh library and close
         if (onRefreshLibrary) {
           onRefreshLibrary();
         }
@@ -638,7 +644,10 @@ const StarterLibraryOnboarding = ({
                   <AlertCircle className="w-8 h-8 text-red-400/60 mx-auto mb-2" />
                   <p className="text-sm text-chef-muted mb-3">Failed to load movies</p>
                   <button
-                    onClick={() => fetchMovies(1)}
+                    onClick={() => {
+                      isInitializedRef.current = false;
+                      setMovieError(false);
+                    }}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chef-surface/60 text-chef-platinum text-sm hover:bg-white/10 transition-colors"
                   >
                     <RefreshCw className="w-4 h-4" />
@@ -654,7 +663,7 @@ const StarterLibraryOnboarding = ({
                 </div>
               ) : (
                 <>
-                  {/* Movie grid - simple grid without AnimatePresence to prevent flickering */}
+                  {/* Movie grid */}
                   <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
                     {visibleMovies.map((movie) => (
                       <QuickAddMovieCard

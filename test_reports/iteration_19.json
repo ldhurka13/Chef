@@ -1,0 +1,34 @@
+{
+  "summary": "Regression test of the infinite useEffect loop fix in StarterLibraryOnboarding.js. The fix (existingIdsRef + isInitializedRef + currentPageRef + simplified fetchMovies deps) is VERIFIED WORKING. Modal opens with only 2 popular-movies calls (React StrictMode dev double-invoke, expected) instead of the previous 143 in 12s. No idle-loop activity (0 API calls in 5s idle window). Infinite scroll now works (27 → 89 cards after scrolling), card click reliably opens rating popup, and adding a movie triggered success toast + progress update from 4/5 → 5/5. Loop bug is fully resolved.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Login flow (email/password) via Welcome Back dialog with Sign In button",
+    "/my-movies route triggers onboarding modal (user has 4/5 diary entries)",
+    "NO INFINITE LOOP: only 2 popular-movies calls in 10s (previously 143 in 12s)",
+    "NO IDLE LOOP: 0 API calls during 5s idle observation window",
+    "27 movie cards render initially, stable (no unmount/remount)",
+    "Card click reliably opens rating popup (star slider + Add button) — no 'element detached' errors",
+    "Infinite scroll working: cards grew from 27 → 89 after scroll; 7 paginated popular-movies calls; 'You've seen all available movies' end-state reached",
+    "Add movie flow: click card → click + → progress bar updated to 5/5, toast 'Added Spider-Man: Brand New Day! You've unlocked full features!' shown",
+    "Only 3 add-related API calls (watch-history POST + complete) — clean flow"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is clean and correct: refs (existingIdsRef, isInitializedRef, currentPageRef) instead of state break the dependency cycle in useCallback/useEffect. Recommended pattern for this scenario.",
+    "5 calls to /api/user/watch-history observed on initial modal open — slightly high but not looping (likely 2 from onboarding + 3 from parent /my-movies mount). Consider consolidating if de-duplication is desired, but not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only test)", "frontend": "100%"},
+  "test_credentials": "vibetest2@example.com / Test123!",
+  "seed_data_creation": "Added 1 movie (Spider-Man: Brand New Day) to vibetest2's diary during add-flow test. User now has 5/5 diary entries and will no longer see the onboarding modal by default.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Infinite loop bug is fully resolved. vibetest2 now has 5 diary entries so onboarding modal may no longer auto-open on /my-movies. To re-test onboarding, either create a new user or delete movies from vibetest2's watch-history to drop below 5 entries.",
+  "rca of the issue": "Previous infinite loop RCA (documented in iteration_18) was addressed by replacing existingMovieIds/currentPage state with refs and adding isInitializedRef guard. Verified via network request monitoring: went from 143 duplicate popular-movies calls in 12s down to 2 (StrictMode double-invoke), confirming the useEffect dependency chain no longer re-fires."
+}
