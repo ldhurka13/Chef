@@ -36,24 +36,29 @@ async def check_onboarding_eligibility(current_user: dict = Depends(get_current_
 
 
 @router.get("/popular-movies")
-async def get_popular_movies_for_onboarding():
+async def get_popular_movies_for_onboarding(page: int = 1, per_page: int = 15):
     """
-    Get popular movies from TMDB for onboarding.
+    Get popular movies from TMDB for onboarding with pagination.
     Returns a mix of all-time popular and classic films.
+    
+    Args:
+        page: Page number (1-indexed)
+        per_page: Number of movies per page (default 15)
     """
     try:
         all_movies = []
         
-        # Get popular movies from multiple pages for variety
-        for page in range(1, 4):  # 3 pages = ~60 movies
-            data = tmdb_request("/movie/popular", {"page": page})
+        # Get popular movies from multiple pages for variety (5 pages = ~100 movies)
+        for tmdb_page in range(1, 6):
+            data = tmdb_request("/movie/popular", {"page": tmdb_page})
             if data and data.get("results"):
                 all_movies.extend(data["results"])
         
-        # Also get some top-rated classics
-        top_rated = tmdb_request("/movie/top_rated", {"page": 1})
-        if top_rated and top_rated.get("results"):
-            all_movies.extend(top_rated["results"])
+        # Also get top-rated classics (2 pages)
+        for tmdb_page in range(1, 3):
+            top_rated = tmdb_request("/movie/top_rated", {"page": tmdb_page})
+            if top_rated and top_rated.get("results"):
+                all_movies.extend(top_rated["results"])
         
         # Deduplicate by id
         seen_ids = set()
@@ -67,17 +72,28 @@ async def get_popular_movies_for_onboarding():
                     movie["poster_url"] = f"https://image.tmdb.org/t/p/w185{poster_path}"
                 unique_movies.append(movie)
         
-        # Shuffle for variety but keep popular ones weighted toward front
+        # Shuffle for variety but keep first batch of popular ones at front
         import random
-        # Take first 20 popular, then shuffle rest and add some
-        popular_batch = unique_movies[:20]
-        rest = unique_movies[20:]
+        popular_batch = unique_movies[:30]  # Top 30 most popular stay at front
+        rest = unique_movies[30:]
         random.shuffle(rest)
         
-        # Combine: 20 popular + 10 random from rest
-        final_movies = popular_batch + rest[:10]
+        # Combine all movies
+        final_movies = popular_batch + rest
         
-        return {"results": final_movies[:30]}
+        # Apply pagination
+        total_movies = len(final_movies)
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_movies = final_movies[start_idx:end_idx]
+        
+        return {
+            "results": paginated_movies,
+            "page": page,
+            "per_page": per_page,
+            "total": total_movies,
+            "has_more": end_idx < total_movies
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch popular movies: {str(e)}")

@@ -3,7 +3,7 @@
  * 
  * A modal component for collecting initial movie taste data from new users.
  * Shows after successful registration and re-prompts if user has < 5 diary entries.
- * Uses TMDB Popular movies for better variety.
+ * Uses TMDB Popular movies with infinite scroll for better variety.
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 const API = process.env.REACT_APP_BACKEND_URL;
 const MINIMUM_MOVIES = 5;
-const VISIBLE_MOVIE_COUNT = 15; // Number of movies to show at once
+const MOVIES_PER_PAGE = 15;
 
 // Helper to get auth headers
 const authHeaders = () => {
@@ -33,7 +33,7 @@ const QuickAddMovieCard = ({ movie, onAdd, isAdding, onFadeComplete }) => {
   const handleAdd = async () => {
     setIsExiting(true);
     await onAdd(movie, rating);
-    // Callback to parent to replace this card
+    // Callback to parent to remove this card
     setTimeout(() => {
       if (onFadeComplete) onFadeComplete(movie.id);
     }, 300);
@@ -223,14 +223,18 @@ const StarterLibraryOnboarding = ({
   user,
   onRefreshLibrary
 }) => {
-  const [allMovies, setAllMovies] = useState([]); // Full pool of movies
   const [visibleMovies, setVisibleMovies] = useState([]); // Currently displayed movies
   const [loadingMovies, setLoadingMovies] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [movieError, setMovieError] = useState(false);
   const [addedCount, setAddedCount] = useState(0);
+  const [addedMovieIds, setAddedMovieIds] = useState(new Set()); // Track added movie IDs
   const [addingMovieId, setAddingMovieId] = useState(null);
   const [isSkipping, setIsSkipping] = useState(false);
   const [existingDiaryCount, setExistingDiaryCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [existingMovieIds, setExistingMovieIds] = useState(new Set()); // User's diary + watchlist
   
   // Letterboxd import state
   const [isImporting, setIsImporting] = useState(false);
@@ -238,33 +242,21 @@ const StarterLibraryOnboarding = ({
   const fileInputRef = useRef(null);
   
   const modalRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const loadMoreTriggerRef = useRef(null);
   
   // Total movies added (existing + new)
   const totalMoviesAdded = existingDiaryCount + addedCount;
-  const moviesNeeded = Math.max(0, MINIMUM_MOVIES - totalMoviesAdded);
   
-  // Fetch popular movies on mount
-  const fetchMovies = useCallback(async () => {
-    setLoadingMovies(true);
-    setMovieError(false);
-    setAddedCount(0);
-    
+  // Fetch initial data (user's existing movies for exclusion)
+  const fetchInitialData = useCallback(async () => {
     try {
-      // Get popular movies from onboarding endpoint
-      const res = await axios.get(`${API}/api/onboarding/popular-movies`, {
-        headers: authHeaders()
-      });
-      
-      const fetchedMovies = res.data?.results || [];
-      
-      // Get user's existing diary and watchlist to exclude
       const [diaryRes, watchlistRes, eligibilityRes] = await Promise.all([
         axios.get(`${API}/api/user/watch-history`, { headers: authHeaders() }).catch(() => ({ data: [] })),
         axios.get(`${API}/api/user/watchlist`, { headers: authHeaders() }).catch(() => ({ data: [] })),
         axios.get(`${API}/api/onboarding/eligibility`, { headers: authHeaders() }).catch(() => ({ data: { diary_count: 0 } }))
       ]);
       
-      // Set existing diary count for progress tracking
       setExistingDiaryCount(eligibilityRes.data?.diary_count || 0);
       
       const existingIds = new Set([
@@ -272,50 +264,99 @@ const StarterLibraryOnboarding = ({
         ...(watchlistRes.data || []).map(m => m.tmdb_id)
       ]);
       
-      // Filter out existing movies
-      const filteredMovies = fetchedMovies.filter(m => !existingIds.has(m.id));
-      
-      // Store all movies and set initial visible subset
-      setAllMovies(filteredMovies);
-      setVisibleMovies(filteredMovies.slice(0, VISIBLE_MOVIE_COUNT));
+      setExistingMovieIds(existingIds);
+      return existingIds;
     } catch (err) {
-      console.error("Failed to fetch movies:", err);
-      setMovieError(true);
-    } finally {
-      setLoadingMovies(false);
+      console.error("Failed to fetch initial data:", err);
+      return new Set();
     }
   }, []);
   
-  useEffect(() => {
-    if (isOpen) {
-      fetchMovies();
+  // Fetch movies with pagination
+  const fetchMovies = useCallback(async (page = 1, existingIds = existingMovieIds) => {
+    if (page === 1) {
+      setLoadingMovies(true);
+      setMovieError(false);
+      setAddedCount(0);
+      setAddedMovieIds(new Set());
+      setVisibleMovies([]);
+    } else {
+      setLoadingMore(true);
     }
-  }, [isOpen, fetchMovies]);
-  
-  // Handle movie card fade complete - replace with new movie
-  const handleMovieFadeComplete = useCallback((movieId) => {
-    setVisibleMovies(prev => {
-      // Find index of the removed movie
-      const removedIndex = prev.findIndex(m => m.id === movieId);
-      if (removedIndex === -1) return prev;
+    
+    try {
+      const res = await axios.get(`${API}/api/onboarding/popular-movies`, {
+        params: { page, per_page: MOVIES_PER_PAGE },
+        headers: authHeaders()
+      });
       
-      // Get IDs of currently visible movies
-      const visibleIds = new Set(prev.map(m => m.id));
+      const fetchedMovies = res.data?.results || [];
+      const hasMoreMovies = res.data?.has_more ?? false;
       
-      // Find next movie from pool that's not currently visible
-      const nextMovie = allMovies.find(m => !visibleIds.has(m.id) && m.id !== movieId);
+      // Filter out user's existing movies
+      const filteredMovies = fetchedMovies.filter(m => !existingIds.has(m.id));
       
-      // Create new array without the removed movie
-      const newVisible = prev.filter(m => m.id !== movieId);
-      
-      // Add next movie if available
-      if (nextMovie) {
-        newVisible.push(nextMovie);
+      if (page === 1) {
+        setVisibleMovies(filteredMovies);
+      } else {
+        setVisibleMovies(prev => {
+          // Avoid duplicates
+          const existingVisibleIds = new Set(prev.map(m => m.id));
+          const newMovies = filteredMovies.filter(m => !existingVisibleIds.has(m.id));
+          return [...prev, ...newMovies];
+        });
       }
       
-      return newVisible;
-    });
-  }, [allMovies]);
+      setHasMore(hasMoreMovies);
+      setCurrentPage(page);
+    } catch (err) {
+      console.error("Failed to fetch movies:", err);
+      if (page === 1) {
+        setMovieError(true);
+      }
+    } finally {
+      setLoadingMovies(false);
+      setLoadingMore(false);
+    }
+  }, [existingMovieIds]);
+  
+  // Initialize on open
+  useEffect(() => {
+    if (isOpen) {
+      const init = async () => {
+        const existingIds = await fetchInitialData();
+        await fetchMovies(1, existingIds);
+      };
+      init();
+    }
+  }, [isOpen, fetchInitialData, fetchMovies]);
+  
+  // Infinite scroll using Intersection Observer
+  useEffect(() => {
+    if (!loadMoreTriggerRef.current || !hasMore || loadingMore || loadingMovies) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+          fetchMovies(currentPage + 1);
+        }
+      },
+      { 
+        root: scrollContainerRef.current,
+        rootMargin: '100px',
+        threshold: 0.1 
+      }
+    );
+    
+    observer.observe(loadMoreTriggerRef.current);
+    
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loadingMovies, currentPage, fetchMovies]);
+  
+  // Handle movie card fade complete - just remove from visible list
+  const handleMovieFadeComplete = useCallback((movieId) => {
+    setVisibleMovies(prev => prev.filter(m => m.id !== movieId));
+  }, []);
   
   // Handle escape key
   const handleSkip = useCallback(async () => {
@@ -360,11 +401,12 @@ const StarterLibraryOnboarding = ({
         comment: ""
       }, { headers: authHeaders() });
       
-      // Update added count
+      // Update added count and track this movie
       setAddedCount(prev => prev + 1);
+      setAddedMovieIds(prev => new Set([...prev, movie.id]));
       
-      // Remove from the pool so it doesn't reappear
-      setAllMovies(prev => prev.filter(m => m.id !== movie.id));
+      // Also add to existing IDs so it doesn't show up in future pages
+      setExistingMovieIds(prev => new Set([...prev, movie.id]));
       
       const newTotal = existingDiaryCount + addedCount + 1;
       const remaining = Math.max(0, MINIMUM_MOVIES - newTotal);
@@ -517,8 +559,11 @@ const StarterLibraryOnboarding = ({
             <ProgressIndicator current={totalMoviesAdded} total={MINIMUM_MOVIES} />
           </div>
           
-          {/* Content */}
-          <div className="px-6 py-5 overflow-y-auto max-h-[calc(85vh-180px)]">
+          {/* Content - Scrollable */}
+          <div 
+            ref={scrollContainerRef}
+            className="px-6 py-5 overflow-y-auto max-h-[calc(85vh-180px)]"
+          >
             {/* Letterboxd Import Section */}
             <div className="mb-6 p-4 rounded-xl bg-chef-surface/40 border border-white/5">
               <div className="flex items-start gap-3">
@@ -583,7 +628,7 @@ const StarterLibraryOnboarding = ({
               {loadingMovies ? (
                 // Loading skeleton
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                  {[...Array(VISIBLE_MOVIE_COUNT)].map((_, i) => (
+                  {[...Array(MOVIES_PER_PAGE)].map((_, i) => (
                     <div key={i} className="aspect-[2/3] rounded-xl bg-chef-surface/40 animate-pulse" />
                   ))}
                 </div>
@@ -593,7 +638,7 @@ const StarterLibraryOnboarding = ({
                   <AlertCircle className="w-8 h-8 text-red-400/60 mx-auto mb-2" />
                   <p className="text-sm text-chef-muted mb-3">Failed to load movies</p>
                   <button
-                    onClick={fetchMovies}
+                    onClick={() => fetchMovies(1)}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chef-surface/60 text-chef-platinum text-sm hover:bg-white/10 transition-colors"
                   >
                     <RefreshCw className="w-4 h-4" />
@@ -608,20 +653,43 @@ const StarterLibraryOnboarding = ({
                   <p className="text-xs text-chef-muted/60">Try the Letterboxd import above</p>
                 </div>
               ) : (
-                // Movie grid with AnimatePresence for smooth transitions
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                  <AnimatePresence mode="popLayout">
-                    {visibleMovies.map((movie) => (
-                      <QuickAddMovieCard
-                        key={movie.id}
-                        movie={movie}
-                        onAdd={handleAddMovie}
-                        isAdding={addingMovieId === movie.id}
-                        onFadeComplete={handleMovieFadeComplete}
-                      />
-                    ))}
-                  </AnimatePresence>
-                </div>
+                <>
+                  {/* Movie grid with AnimatePresence for smooth transitions */}
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+                    <AnimatePresence mode="popLayout">
+                      {visibleMovies.map((movie) => (
+                        <QuickAddMovieCard
+                          key={movie.id}
+                          movie={movie}
+                          onAdd={handleAddMovie}
+                          isAdding={addingMovieId === movie.id}
+                          onFadeComplete={handleMovieFadeComplete}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                  
+                  {/* Load more trigger / Loading indicator */}
+                  <div 
+                    ref={loadMoreTriggerRef} 
+                    className="mt-6 flex justify-center"
+                  >
+                    {loadingMore ? (
+                      <div className="flex items-center gap-2 text-chef-muted text-sm py-4">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Loading more movies...</span>
+                      </div>
+                    ) : hasMore ? (
+                      <div className="text-chef-muted/50 text-xs py-4">
+                        Scroll for more movies
+                      </div>
+                    ) : visibleMovies.length > 0 ? (
+                      <div className="text-chef-muted/50 text-xs py-4">
+                        You&apos;ve seen all available movies
+                      </div>
+                    ) : null}
+                  </div>
+                </>
               )}
             </div>
           </div>
