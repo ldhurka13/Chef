@@ -335,20 +335,26 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     if len(contents) > 2 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File size must be under 2MB")
     
-    # Save to uploads directory
-    os.makedirs("/app/uploads/avatars", exist_ok=True)
-    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-    filename = f"{current_user['id']}.{ext}"
-    filepath = f"/app/uploads/avatars/{filename}"
+    # Upload to Emergent object storage
+    import uuid as _uuid
+    import logging
+    from services.object_storage import put_object, APP_NAME
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "jpg"
+    storage_path = f"{APP_NAME}/avatars/{current_user['id']}/{_uuid.uuid4()}.{ext}"
+    try:
+        result = put_object(storage_path, contents, file.content_type or "image/jpeg")
+    except Exception as e:
+        logging.error(f"Avatar upload failed: {e}")
+        raise HTTPException(status_code=502, detail="Avatar upload failed")
     
-    with open(filepath, "wb") as f:
-        f.write(contents)
-    
-    # Store URL path in user record
-    avatar_url = f"/api/uploads/avatars/{filename}"
+    avatar_url = f"/api/uploads/avatars/{current_user['id']}?v={_uuid.uuid4().hex[:8]}"
     await db.auth_users.update_one(
         {"id": current_user["id"]},
-        {"$set": {"avatar_url": avatar_url}}
+        {"$set": {
+            "avatar_url": avatar_url,
+            "avatar_path": result["path"],
+            "avatar_content_type": file.content_type or "image/jpeg"
+        }}
     )
     
     return {"avatar_url": avatar_url}

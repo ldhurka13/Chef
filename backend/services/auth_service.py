@@ -44,7 +44,7 @@ def verify_token(token: str) -> Optional[str]:
         if int(time.time()) - int(timestamp) > 7 * 24 * 3600:
             return None
         return user_id
-    except:
+    except Exception:
         return None
 
 
@@ -60,3 +60,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Optio
     
     user = await db.auth_users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
     return user
+
+
+# Alias for routes that work with or without authentication
+get_current_user_optional = get_current_user

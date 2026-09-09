@@ -49,7 +49,7 @@ class TestLetterboxdImport:
             if wl_resp.status_code == 200:
                 for item in wl_resp.json() or []:
                     self.session.delete(f"{BASE_URL}/api/user/watchlist/{item['tmdb_id']}")
-        except:
+        except Exception:
             pass
 
     # ============ ZIP IMPORT TESTS ============

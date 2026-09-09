@@ -277,3 +277,25 @@ A persistent onboarding flow to collect initial movie taste data from new users:
 - Session-level dismissal prevents modal spam during single session
 
 **Testing:** 100% pass rate (15 backend tests + full frontend E2E verification)
+
+---
+
+## Unified Intent-Aware Search (COMPLETED - 2026-06-09)
+
+**Goal:** Replace the old FeelingSearch with a single home-page search bar that combines TMDB entity lookup with the AI Vibe Engine.
+
+**Backend:**
+- `models/search.py`, `services/search_service.py`, `routers/search.py`
+- `GET /api/search/suggestions?q=` — normalized titles (movie/TV) + people, independent quotas (titles up to limit, people up to 4) so person-name queries still surface people
+- `GET /api/search/person/{id}` — person details with separate `acting` / `directing` credit arrays (via TMDB combined_credits)
+- `GET /api/search/intent?q=` — is_entity + best_match heuristic
+- `POST /api/search/vibe` {query, limit} — AI Vibe Engine free-text search, capped at EXACTLY 5 results; works with/without auth (personalized when authed)
+- `GET /api/movies/{id}?media_type=tv|movie` — now handles TV shows (maps name/first_air_date/episode_run_time); `GET /api/movies/{id}/streaming?media_type=` uses series vs movie endpoint
+
+**Frontend:**
+- `FeelingSearch.js` — unified bar: debounced dropdown (titles + people), keyboard nav, quick-prompt chips, free-text Enter -> vibe search rendered as a fixed full-screen overlay (5 cards)
+- `PersonDetail.js` — actor/director modal with Acting + Directing sections; clicking a credit opens MovieDetail
+- `App.js` — handlePersonClick / handlePersonMovieSelect wired; PersonDetail mounted next to MovieDetail
+- `MovieDetail.js` — passes media_type to detail + streaming fetches (TV safe)
+
+**Testing:** iteration_20.json — 12/12 backend tests pass, all frontend flows pass (100%). No bugs found.

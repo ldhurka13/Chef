@@ -26,6 +26,7 @@ import ResetPassword from "./components/ResetPassword";
 import MyMoviesPage from "./components/MyMoviesPage";
 import MovieGame from "./components/MovieGame";
 import StarterLibraryOnboarding from "./components/StarterLibraryOnboarding";
+import PersonDetail from "./components/PersonDetail";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -67,6 +68,8 @@ function AppContent() {
   const [randomPicksOpen, setRandomPicksOpen] = useState(false);
   const [randomLoading, setRandomLoading] = useState(false);
   const [movieGameOpen, setMovieGameOpen] = useState(false);
+  const [selectedPersonId, setSelectedPersonId] = useState(null);
+  const [personDetailOpen, setPersonDetailOpen] = useState(false);
   
   // Auth state
   const [authUser, setAuthUser] = useState(null);
@@ -547,6 +550,19 @@ function AppContent() {
     setMovieDetailOpen(true);
   };
 
+  // Handle person (actor/director) click from search
+  const handlePersonClick = (person) => {
+    if (!person?.id) return;
+    setSelectedPersonId(person.id);
+    setPersonDetailOpen(true);
+  };
+
+  // Selecting a movie from within the person modal
+  const handlePersonMovieSelect = (movie) => {
+    setPersonDetailOpen(false);
+    handleMovieClick(movie);
+  };
+
   // Handle add to watch history
   const handleAddToHistory = async (movie, rating) => {
     try {
@@ -588,7 +604,7 @@ function AppContent() {
           {/* Feeling Search - centered */}
           <div className="flex-1 flex justify-center">
             <div className="w-full max-w-xl">
-              <FeelingSearch onMovieClick={handleMovieClick} />
+              <FeelingSearch onMovieClick={handleMovieClick} onPersonClick={handlePersonClick} />
             </div>
           </div>
           
@@ -734,6 +750,17 @@ function AppContent() {
         movie={selectedMovie}
         onAddToHistory={handleAddToHistory}
       />
+      
+      {/* Person Detail Modal */}
+      <AnimatePresence>
+        {personDetailOpen && selectedPersonId && (
+          <PersonDetail
+            personId={selectedPersonId}
+            onClose={() => setPersonDetailOpen(false)}
+            onMovieSelect={handlePersonMovieSelect}
+          />
+        )}
+      </AnimatePresence>
       
       {/* Random Picks Modal */}
       {randomPicksOpen && (

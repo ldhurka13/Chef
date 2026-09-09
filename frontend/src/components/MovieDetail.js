@@ -49,8 +49,9 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry })
 
   useEffect(() => {
     if (open && movie?.id) {
-      fetchDetails(movie.id);
-      fetchStreaming(movie.id);
+      const mediaType = movie.media_type || "movie";
+      fetchDetails(movie.id, mediaType);
+      fetchStreaming(movie.id, mediaType);
       checkWatchlist(movie.id);
     }
     if (!open) {
@@ -60,10 +61,10 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry })
     }
   }, [open, movie]);
 
-  const fetchDetails = async (movieId) => {
+  const fetchDetails = async (movieId, mediaType = "movie") => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API}/movies/${movieId}`);
+      const res = await axios.get(`${API}/movies/${movieId}?media_type=${mediaType}`);
       setDetails(res.data);
     } catch (error) {
       console.error("Failed to fetch movie details:", error);
@@ -72,11 +73,11 @@ const MovieDetail = ({ open, onOpenChange, movie, onAddToHistory, userCountry })
     }
   };
 
-  const fetchStreaming = async (movieId) => {
+  const fetchStreaming = async (movieId, mediaType = "movie") => {
     setStreamingLoading(true);
     try {
       const country = userCountry || getUserCountry();
-      const res = await axios.get(`${API}/movies/${movieId}/streaming?country=${country}`);
+      const res = await axios.get(`${API}/movies/${movieId}/streaming?country=${country}&media_type=${mediaType}`);
       setStreamingOptions(res.data.results || []);
     } catch (error) {
       console.error("Failed to fetch streaming info:", error);

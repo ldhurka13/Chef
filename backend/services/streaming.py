@@ -106,7 +106,7 @@ async def get_cached_streaming(movie_id: int, country: str = "us") -> dict:
                         "options": cached.get("options", []),
                         "cached": True
                     }
-            except:
+            except Exception:
                 pass
     
     # Fetch fresh data

@@ -29,7 +29,7 @@ Example: from services.auth_service import hash_password, verify_password
 """
 
 from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -88,7 +88,9 @@ api_router = APIRouter(prefix="/api")
 
 # Import and include modular routers
 from routers.onboarding import router as onboarding_router
+from routers.search import router as search_router
 api_router.include_router(onboarding_router)
+api_router.include_router(search_router)
 
 # ============ MODELS ============
 
@@ -244,7 +246,7 @@ def verify_token(token: str) -> Optional[str]:
         if int(time.time()) - int(timestamp) > 7 * 24 * 3600:
             return None
         return user_id
-    except:
+    except Exception:
         return None
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
@@ -804,20 +806,26 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     if len(contents) > 2 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File size must be under 2MB")
     
-    # Save to uploads directory
-    os.makedirs("/app/uploads/avatars", exist_ok=True)
-    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-    filename = f"{current_user['id']}.{ext}"
-    filepath = f"/app/uploads/avatars/{filename}"
+    # Upload to Emergent object storage
+    import uuid as _uuid
+    from services.object_storage import put_object, APP_NAME
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "jpg"
+    storage_path = f"{APP_NAME}/avatars/{current_user['id']}/{_uuid.uuid4()}.{ext}"
+    try:
+        result = put_object(storage_path, contents, file.content_type or "image/jpeg")
+    except Exception as e:
+        logging.error(f"Avatar upload failed: {e}")
+        raise HTTPException(status_code=502, detail="Avatar upload failed")
     
-    with open(filepath, "wb") as f:
-        f.write(contents)
-    
-    # Store URL path in user record
-    avatar_url = f"/api/uploads/avatars/{filename}"
+    # Store storage reference; serve via backend proxy route
+    avatar_url = f"/api/uploads/avatars/{current_user['id']}?v={_uuid.uuid4().hex[:8]}"
     await db.auth_users.update_one(
         {"id": current_user["id"]},
-        {"$set": {"avatar_url": avatar_url}}
+        {"$set": {
+            "avatar_url": avatar_url,
+            "avatar_path": result["path"],
+            "avatar_content_type": file.content_type or "image/jpeg"
+        }}
     )
     
     return {"avatar_url": avatar_url}
@@ -2234,8 +2242,10 @@ async def get_curated_for_you(current_user: dict = Depends(get_current_user)):
                 days_ago = (now - watch_date).days
                 # Exponential decay: recent watches get more weight
                 recency_boost = max(0.5, 1.0 - (days_ago / 365) * 0.5)  # 0.5 to 1.0
-            except:
+            except Exception:
                 recency_boost = 0.75
+        
+        # Combined preference weight: rating * rewatch bonus * recency
         
         # Combined preference weight: rating * rewatch bonus * recency
         # Higher ratings (6+) contribute positively, lower ratings contribute less
@@ -2489,7 +2499,7 @@ async def get_explore_for_you(current_user: dict = Depends(get_current_user)):
                 watch_date = datetime.fromisoformat(last_watch.replace("Z", "+00:00")) if "T" in last_watch else datetime.strptime(last_watch, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                 days_ago = (now - watch_date).days
                 recency_boost = max(0.5, 1.0 - (days_ago / 365) * 0.5)
-            except:
+            except Exception:
                 recency_boost = 0.75
         
         # Combined preference weight
@@ -4959,19 +4969,33 @@ async def get_comfort_movies(request: ComfortRequest):
     return {"results": enriched[:3], "cached": False, "weather": weather_description}
 
 @api_router.get("/movies/{movie_id}")
-async def get_movie_details(movie_id: int):
-    """Get detailed movie information"""
+async def get_movie_details(movie_id: int, media_type: str = "movie"):
+    """Get detailed movie or TV show information"""
     global GENRE_MAP
     if not GENRE_MAP:
         GENRE_MAP = get_genres()
     
+    is_tv = media_type == "tv"
+    tmdb_path = f"/tv/{movie_id}" if is_tv else f"/movie/{movie_id}"
+    
     data = tmdb_request(
-        f"/movie/{movie_id}",
+        tmdb_path,
         {"append_to_response": "credits,videos,similar,recommendations"}
     )
     
     if not data:
-        raise HTTPException(status_code=404, detail="Movie not found")
+        raise HTTPException(status_code=404, detail="Title not found")
+    
+    # Normalize movie vs TV fields
+    if is_tv:
+        title = data.get("name", "")
+        release_date = data.get("first_air_date", "")
+        run_times = data.get("episode_run_time") or []
+        runtime = run_times[0] if run_times else None
+    else:
+        title = data.get("title", "")
+        release_date = data.get("release_date", "")
+        runtime = data.get("runtime")
     
     # Get trailer
     videos = data.get("videos", {}).get("results", [])
@@ -4997,11 +5021,10 @@ async def get_movie_details(movie_id: int):
             in_history = True
             user_rating = history_entry.get("user_rating")
     
-    # Enrich with local IMDB data
-    title = data.get("title", "")
-    year = int(data.get("release_date", "0000")[:4]) if data.get("release_date") else None
+    # Enrich with local IMDB data (movies only)
+    year = int(release_date[:4]) if release_date else None
     local_movie = None
-    if title and year:
+    if not is_tv and title and year:
         local_movie = await db.movies.find_one(
             {"title_lower": title.lower(), "year": year},
             {"_id": 0}
@@ -5009,10 +5032,11 @@ async def get_movie_details(movie_id: int):
     
     return {
         "id": data.get("id"),
-        "title": data.get("title"),
+        "media_type": media_type,
+        "title": title,
         "overview": data.get("overview"),
-        "release_date": data.get("release_date"),
-        "runtime": data.get("runtime"),
+        "release_date": release_date,
+        "runtime": runtime,
         "vote_average": data.get("vote_average"),
         "vote_count": data.get("vote_count"),
         "genres": genres,
@@ -5032,7 +5056,7 @@ async def get_movie_details(movie_id: int):
         "similar": [
             {
                 "id": m.get("id"),
-                "title": m.get("title"),
+                "title": m.get("title") or m.get("name"),
                 "poster_url": get_image_url(m.get("poster_path"), "w342")
             }
             for m in data.get("similar", {}).get("results", [])[:6]
@@ -5061,10 +5085,11 @@ SERVICE_DISPLAY = {
     "paramount": {"name": "Paramount+", "color": "#0064FF"},
 }
 
-def fetch_streaming_availability(tmdb_id: int, country: str = "us") -> list:
+def fetch_streaming_availability(tmdb_id: int, country: str = "us", media_type: str = "movie") -> list:
     """Fetch streaming availability from Movies of the Night API with MongoDB caching"""
     try:
-        url = f"{STREAMING_API_BASE}/shows/movie/{tmdb_id}"
+        show_type = "series" if media_type == "tv" else "movie"
+        url = f"{STREAMING_API_BASE}/shows/{show_type}/{tmdb_id}"
         headers = {
             "x-rapidapi-host": "streaming-availability.p.rapidapi.com",
             "x-rapidapi-key": RAPIDAPI_KEY
@@ -5125,8 +5150,8 @@ def fetch_streaming_availability(tmdb_id: int, country: str = "us") -> list:
         return []
 
 @api_router.get("/movies/{movie_id}/streaming")
-async def get_streaming_availability(movie_id: int, country: str = "us"):
-    """Get streaming availability for a movie, with 24h MongoDB cache"""
+async def get_streaming_availability(movie_id: int, country: str = "us", media_type: str = "movie"):
+    """Get streaming availability for a movie/show, with 24h MongoDB cache"""
     if not RAPIDAPI_KEY:
         raise HTTPException(status_code=500, detail="Streaming API not configured")
     
@@ -5134,7 +5159,7 @@ async def get_streaming_availability(movie_id: int, country: str = "us"):
     
     # Check MongoDB cache
     cached = await db.streaming_cache.find_one(
-        {"tmdb_id": movie_id, "country": country},
+        {"tmdb_id": movie_id, "country": country, "media_type": media_type},
         {"_id": 0}
     )
     
@@ -5150,14 +5175,15 @@ async def get_streaming_availability(movie_id: int, country: str = "us"):
                 pass
     
     # Fetch from API
-    options = fetch_streaming_availability(movie_id, country)
+    options = fetch_streaming_availability(movie_id, country, media_type)
     
     # Store in MongoDB cache
     await db.streaming_cache.update_one(
-        {"tmdb_id": movie_id, "country": country},
+        {"tmdb_id": movie_id, "country": country, "media_type": media_type},
         {"$set": {
             "tmdb_id": movie_id,
             "country": country,
+            "media_type": media_type,
             "options": options,
             "cached_at": datetime.now(timezone.utc).isoformat()
         }},
@@ -5451,13 +5477,25 @@ async def seed_initial_data():
 # Include the router in the main app
 app.include_router(api_router)
 
-# Serve uploaded avatar files
-@app.get("/api/uploads/avatars/{filename}")
-async def serve_avatar(filename: str):
-    filepath = f"/app/uploads/avatars/{filename}"
-    if not os.path.exists(filepath):
+# Serve uploaded avatar files from object storage
+@app.get("/api/uploads/avatars/{user_id}")
+async def serve_avatar(user_id: str):
+    user = await db.auth_users.find_one(
+        {"id": user_id},
+        {"_id": 0, "avatar_path": 1, "avatar_content_type": 1}
+    )
+    if not user or not user.get("avatar_path"):
         raise HTTPException(status_code=404, detail="Avatar not found")
-    return FileResponse(filepath)
+    from services.object_storage import get_object
+    try:
+        data, content_type = get_object(user["avatar_path"])
+    except Exception:
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    return Response(
+        content=data,
+        media_type=user.get("avatar_content_type") or content_type,
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
 
 app.add_middleware(
     CORSMiddleware,
