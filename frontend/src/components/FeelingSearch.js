@@ -345,7 +345,7 @@ const FeelingSearch = ({
             onKeyDown={handleKeyDown}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setTimeout(() => setIsFocused(false), 150)}
-            placeholder="Search movies, shows, people, or tell Chef what you're feeling..."
+            placeholder="Tell Chef what you're feeling..."
             className="flex-1 bg-transparent text-chef-platinum placeholder-chef-platinum/50
                        text-sm font-normal tracking-wider
                        focus:outline-none"
