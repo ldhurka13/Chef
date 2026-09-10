@@ -77,48 +77,12 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ -e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+android-sdk/
+
+# Build caches (frontend)
 frontend/node_modules/.cache/default-development/0.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
+
+# Credential files
 credentials.json
 *.pem
 *.key
