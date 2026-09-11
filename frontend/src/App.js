@@ -115,7 +115,7 @@ function AppContent() {
     // For Chef's Curation, use dedicated state
     if (section === "chefs-curation") {
       // If vibe has been applied, use AI recommendations (already in state)
-      if (vibeApplied && chefsCurationMovies.length > 0) {
+      if (chefsCurationMovies.length > 0) {
         setSectionMovies(chefsCurationMovies);
         return;
       }
