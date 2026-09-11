@@ -64,7 +64,7 @@ IMAGE_BASE_URL = "https://image.tmdb.org/t/p/"
 
 # Streaming Availability API (Movies of the Night)
 RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY')
-STREAMING_API_BASE = "https://streaming-availability.p.rapidapi.com"
+STREAMING_API_BASE = "https://api.movieofthenight.com/v4"
 ALLOWED_SERVICES = {"netflix", "prime", "disney", "hulu", "apple", "hbo", "paramount"}
 
 # Resend email config
@@ -5091,8 +5091,7 @@ def fetch_streaming_availability(tmdb_id: int, country: str = "us", media_type: 
         show_type = "series" if media_type == "tv" else "movie"
         url = f"{STREAMING_API_BASE}/shows/{show_type}/{tmdb_id}"
         headers = {
-            "x-rapidapi-host": "streaming-availability.p.rapidapi.com",
-            "x-rapidapi-key": RAPIDAPI_KEY
+            "x-api-key": RAPIDAPI_KEY
         }
         params = {"country": country}
         

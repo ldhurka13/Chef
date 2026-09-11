@@ -21,7 +21,7 @@ IMAGE_BASE_URL = "https://image.tmdb.org/t/p/"
 
 # Streaming Availability API (Movies of the Night)
 RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY')
-STREAMING_API_BASE = "https://streaming-availability.p.rapidapi.com"
+STREAMING_API_BASE = "https://api.movieofthenight.com/v4"
 ALLOWED_SERVICES = {"netflix", "prime", "disney", "hulu", "apple", "hbo", "paramount"}
 
 # Resend email config

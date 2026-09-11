@@ -24,8 +24,7 @@ def fetch_streaming_availability(tmdb_id: int, country: str = "us") -> list:
     try:
         url = f"{STREAMING_API_BASE}/shows/movie/{tmdb_id}"
         headers = {
-            "x-rapidapi-host": "streaming-availability.p.rapidapi.com",
-            "x-rapidapi-key": RAPIDAPI_KEY
+            "x-api-key": RAPIDAPI_KEY
         }
         params = {"country": country}
         
