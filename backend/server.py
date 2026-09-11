@@ -4178,7 +4178,7 @@ Return 20 ranked movie recommendations as a JSON array with rank, title, year, v
                     streaming_data = await get_cached_streaming(movie["id"], "us")
                     options = streaming_data.get("options", [])
                     matching = [o for o in options if o.get("service_id") in user_services
-                                and o.get("type") in ("subscription", "free", "addon")]
+                                and o.get("type") == "subscription"]
                     if matching:
                         movie["streaming_matches"] = [o["service_id"] for o in matching]
                         filtered.append(movie)
