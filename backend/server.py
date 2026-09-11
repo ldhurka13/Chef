@@ -211,6 +211,8 @@ class AIVibeRequest(BaseModel):
     mood: int = Field(ge=0, le=100, default=50)  # 0=Serious (dramatic), 100=Fun (comedy)
     energy: int = Field(ge=0, le=100, default=50)  # 0=Exhausted (calming), 100=LFG (intense)
     watch_context: str = Field(default="solo")  # "solo", "date", "group"
+    feeling_adventurous: bool = Field(default=False)  # Exclude Diary + Watchlist titles
+    only_my_streaming: bool = Field(default=False)  # Filter to user's streaming services
 
 # ============ AUTH HELPERS ============
 
@@ -3741,18 +3743,23 @@ async def get_ai_vibe_recommendations(
         "top_genres": [],
         "top_actors": [],
         "top_directors": [],
-        "watch_history": []
+        "watch_history": [],
+        "watchlist_titles": [],
+        "watched_tmdb_ids": set(),
+        "watchlist_tmdb_ids": set(),
+        "streaming_services": [],
     }
     
     if user_id:
         # Get user data
-        user_data = await db.users.find_one({"id": user_id}, {"_id": 0})
+        user_data = await db.auth_users.find_one({"id": user_id}, {"_id": 0})
         if user_data:
             birth_year = user_data.get("birth_year", 1995)
             user_profile["age"] = datetime.now().year - birth_year
             user_profile["top_genres"] = user_data.get("favorite_genres", [])
             user_profile["top_actors"] = user_data.get("favorite_actors", [])
             user_profile["top_directors"] = user_data.get("favorite_directors", [])
+            user_profile["streaming_services"] = user_data.get("streaming_services", []) or []
         
         # Get watch history (last 50 movies)
         watch_history = await db.watch_history.find(
@@ -3764,6 +3771,15 @@ async def get_ai_vibe_recommendations(
             {"title": w.get("title", ""), "rating": w.get("user_rating", 0)}
             for w in watch_history
         ]
+        user_profile["watched_tmdb_ids"] = {w.get("tmdb_id") for w in watch_history if w.get("tmdb_id")}
+        
+        # Get watchlist (for feeling_adventurous)
+        watchlist_items = await db.watchlist.find(
+            {"user_id": user_id},
+            {"_id": 0, "title": 1, "tmdb_id": 1}
+        ).to_list(200)
+        user_profile["watchlist_titles"] = [w.get("title", "") for w in watchlist_items if w.get("title")]
+        user_profile["watchlist_tmdb_ids"] = {w.get("tmdb_id") for w in watchlist_items if w.get("tmdb_id")}
         
         # Try to get profile insights for better recommendations
         insights_cache = await db.user_insights_cache.find_one(
@@ -3938,10 +3954,21 @@ async def get_ai_vibe_recommendations(
     
     # Build the prompt for LLM
     # Dynamic rewatchability based on vibe - don't exclude watched movies for low brain/energy
-    include_rewatches_dynamic = (bp < 40 or energy < 40)
+    # BUT: feeling_adventurous ALWAYS forces exclusion of Diary + Watchlist
+    include_rewatches_dynamic = (bp < 40 or energy < 40) and not vibe_request.feeling_adventurous
     
     watch_history_text = ""
-    if user_profile["watch_history"] and not include_rewatches_dynamic:
+    if vibe_request.feeling_adventurous:
+        # Feeling adventurous: exclude both diary and watchlist
+        exclude_titles = []
+        exclude_titles.extend([w["title"] for w in user_profile["watch_history"] if w.get("title")])
+        exclude_titles.extend([t for t in user_profile["watchlist_titles"] if t])
+        # Dedupe while preserving order
+        seen = set()
+        exclude_titles = [t for t in exclude_titles if not (t in seen or seen.add(t))]
+        if exclude_titles:
+            watch_history_text = f"\n\nFEELING ADVENTUROUS: The user wants ONLY new discoveries. STRICTLY EXCLUDE these titles from their Diary and Watchlist: {', '.join(exclude_titles[:60])}"
+    elif user_profile["watch_history"] and not include_rewatches_dynamic:
         watched_titles = [w["title"] for w in user_profile["watch_history"] if w["title"]]
         if watched_titles:
             watch_history_text = f"\n\nUser's watch history (EXCLUDE these titles): {', '.join(watched_titles[:30])}"
@@ -4034,6 +4061,7 @@ Watch Context: {watch_context_text}
 
 {f"VIBE INTERSECTION ANALYSIS:{chr(10)}{intersection_text}" if intersection_text else ""}
 {web_context}
+{watch_history_text}
 
 Remember: Match ALL vibe parameters together. The intersection of Brain Power + Emotion + Energy defines the specific type of film needed.
 Rank from #1 (BEST vibe match, vibe_score ~95-100) down to #20 (still good match, vibe_score ~70-85).
@@ -4126,10 +4154,49 @@ Return 20 ranked movie recommendations as a JSON array with rank, title, year, v
                 movie["ai_recommended"] = False
                 enriched_results.append(movie)
     
+    # ========== APPLY TOGGLES (post-enrichment safety filters) ==========
+    filters_applied = []
+    
+    # Feeling Adventurous: exclude any movie in user's Diary or Watchlist (safety net)
+    if vibe_request.feeling_adventurous and user_id:
+        exclude_ids = user_profile["watched_tmdb_ids"] | user_profile["watchlist_tmdb_ids"]
+        if exclude_ids:
+            enriched_results = [m for m in enriched_results if m.get("id") not in exclude_ids]
+            filters_applied.append("feeling_adventurous")
+    
+    # Only my Streaming: filter to movies available on user's streaming services
+    streaming_hint = None
+    if vibe_request.only_my_streaming and user_id:
+        user_services = set(user_profile["streaming_services"] or [])
+        if not user_services:
+            streaming_hint = "no_services_set"
+        else:
+            from services.streaming import get_cached_streaming
+            filtered = []
+            for movie in enriched_results:
+                try:
+                    streaming_data = await get_cached_streaming(movie["id"], "us")
+                    options = streaming_data.get("options", [])
+                    matching = [o for o in options if o.get("service_id") in user_services
+                                and o.get("type") in ("subscription", "free", "addon")]
+                    if matching:
+                        movie["streaming_matches"] = [o["service_id"] for o in matching]
+                        filtered.append(movie)
+                except Exception as e:
+                    logging.warning(f"Streaming filter check failed for {movie.get('id')}: {e}")
+            enriched_results = filtered
+            filters_applied.append("only_my_streaming")
+    
+    # Re-rank after filtering
+    for idx, m in enumerate(enriched_results, start=1):
+        m["vibe_rank"] = idx
+    
     return {
         "results": enriched_results,
         "vibe_description": vibe_text,
-        "ai_powered": True
+        "ai_powered": True,
+        "filters_applied": filters_applied,
+        "streaming_hint": streaming_hint,
     }
 
 

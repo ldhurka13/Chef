@@ -60,16 +60,16 @@ const FloatingNav = ({ onVibeClick, onRandomClick, onGameClick }) => {
       />
       
       <NavItem
-        icon={Sliders}
-        label="Vibe"
+        icon={Shuffle}
+        label="Random"
         isActive={false}
-        onClick={onVibeClick}
-        testId="nav-vibe-btn"
+        onClick={onRandomClick}
+        testId="nav-random-btn"
       />
       
-      {/* Random Movie Button - Center Prominent */}
+      {/* Vibe Console Button - Center Prominent */}
       <motion.button
-        onClick={onRandomClick}
+        onClick={onVibeClick}
         className="relative -mt-4 w-14 h-14 rounded-full 
                    bg-chef-teal/20 border border-chef-teal/30
                    flex items-center justify-center
@@ -78,9 +78,9 @@ const FloatingNav = ({ onVibeClick, onRandomClick, onGameClick }) => {
                    transition-all duration-300"
         whileHover={{ scale: 1.1, y: -2 }}
         whileTap={{ scale: 0.95 }}
-        data-testid="nav-random-btn"
+        data-testid="nav-vibe-btn"
       >
-        <Shuffle className="w-6 h-6 text-chef-teal stroke-1" />
+        <Sliders className="w-6 h-6 text-chef-teal stroke-1" />
       </motion.button>
       
       <NavItem

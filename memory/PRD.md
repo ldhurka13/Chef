@@ -299,3 +299,26 @@ A persistent onboarding flow to collect initial movie taste data from new users:
 - `MovieDetail.js` — passes media_type to detail + streaming fetches (TV safe)
 
 **Testing:** iteration_20.json — 12/12 backend tests pass, all frontend flows pass (100%). No bugs found.
+
+---
+
+## Vibe Console + Nav Redesign (COMPLETED - 2026-02-XX)
+
+**Frontend:**
+- `FloatingNav.js` — Vibe (sliders) is now the prominent CENTER button; Random becomes a normal side item
+- `UserMenu.js` — Removed old "Profile" item, renamed "Details" → "Profile"; kept Settings + Log Out
+- `VibeConsole.js` — Removed Reset button; added two toggle switches:
+  - **Feeling adventurous**: excludes any title already in the user's Diary or Watchlist
+  - **Only my Streaming**: filters recommendations to titles available on the user's saved streaming services (with hint if none set)
+- Toggles reset to OFF each time the console opens
+- `App.js` — `VibeConsole` now receives `user`; removed unused `handleVibeReset`
+
+**Backend (`server.py`):**
+- `AIVibeRequest` gained `feeling_adventurous: bool` and `only_my_streaming: bool`
+- `/api/movies/ai-vibe-recommendations`:
+  - Fetches user's watchlist + streaming_services (also fixed pre-existing bug that read `db.users` instead of `db.auth_users`)
+  - When `feeling_adventurous=True`: forces LLM exclusion of Diary+Watchlist titles AND post-filters by tmdb_id
+  - When `only_my_streaming=True`: uses `services.streaming.get_cached_streaming` (US region, subscription/free/addon types) to keep only movies available on the user's services
+  - Returns extra fields: `filters_applied: []`, `streaming_hint: "no_services_set" | null`
+
+**Testing:** Verified via curl — feeling_adventurous returned 20 filtered results; only_my_streaming (netflix/hulu/prime) narrowed 20→9 with matching services shown; visual verification of all UI changes via Playwright.

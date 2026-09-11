@@ -479,35 +479,6 @@ function AppContent() {
     }
   }, [activeSection]);
 
-  // Reset vibe to default (for Chef's Curation)
-  const handleVibeReset = useCallback(async () => {
-    setVibeParams({
-      brain_power: 50,
-      mood: 50,
-      energy: 50,
-      watch_context: "solo",
-    });
-    setVibeApplied(false);
-    
-    // Refresh Chef's Curation with default recommendations
-    if (activeSection === "chefs-curation") {
-      setChefsCurationLoading(true);
-      setSectionLoading(true);
-      try {
-        const token = localStorage.getItem("chef_token");
-        const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await axios.get(`${API}/movies/chefs-curation`, { headers: authHeader });
-        setChefsCurationMovies(res.data.results || []);
-        setSectionMovies(res.data.results || []);
-      } catch (error) {
-        console.error("Failed to reset Chef's Curation:", error);
-      } finally {
-        setChefsCurationLoading(false);
-        setSectionLoading(false);
-      }
-    }
-  }, [activeSection]);
-
   // Handle random movie picks
   const handleRandomPicks = async (isRefresh = false) => {
     if (!isRefresh) {
@@ -740,7 +711,7 @@ function AppContent() {
         onOpenChange={setVibeConsoleOpen}
         params={vibeParams}
         onParamsChange={handleVibeChange}
-        onReset={handleVibeReset}
+        user={authUser}
       />
       
       {/* Movie Detail Modal */}

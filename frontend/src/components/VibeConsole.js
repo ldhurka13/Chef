@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Brain, Smile, Zap, RefreshCw, Loader2, User, Users, Heart } from "lucide-react";
+import { X, Brain, Smile, Zap, Loader2, User, Users, Heart, Compass, Tv } from "lucide-react";
+import { Switch } from "./ui/switch";
 
 // Watch Context Selector Component
 const WatchContextSelector = ({ value, onChange }) => {
@@ -80,33 +81,64 @@ const VerticalSlider = ({ value, onChange, label, icon: Icon, lowLabel, highLabe
   );
 };
 
-const VibeConsole = ({ open, onOpenChange, params, onParamsChange, onReset }) => {
-  const [localParams, setLocalParams] = useState({...params, watch_context: params.watch_context || "solo"});
+// Toggle Row Component
+const ToggleRow = ({ icon: Icon, iconColor, title, subtitle, checked, onCheckedChange, testId, hint }) => {
+  return (
+    <div
+      className={`flex items-center gap-4 px-4 py-3 rounded-lg border transition-all
+        ${checked
+          ? "bg-chef-teal/5 border-chef-teal/30"
+          : "bg-chef-surface/40 border-white/10 hover:border-white/20"
+        }`}
+    >
+      <div className={`p-2 rounded-full bg-white/5 ${iconColor}`}>
+        <Icon className="w-4 h-4" strokeWidth={1.5} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-chef-platinum">{title}</p>
+        <p className="text-xs text-chef-muted mt-0.5">{hint || subtitle}</p>
+      </div>
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        data-testid={testId}
+        className="data-[state=checked]:bg-chef-teal"
+      />
+    </div>
+  );
+};
+
+const VibeConsole = ({ open, onOpenChange, params, onParamsChange, user }) => {
+  const [localParams, setLocalParams] = useState({
+    ...params,
+    watch_context: params.watch_context || "solo",
+    feeling_adventurous: false,
+    only_my_streaming: false,
+  });
   const [applyLoading, setApplyLoading] = useState(false);
   
   useEffect(() => {
-    setLocalParams({...params, watch_context: params.watch_context || "solo"});
-  }, [params]);
+    // Reset toggles to OFF each time the console opens, keep vibe sliders/context
+    if (open) {
+      setLocalParams({
+        ...params,
+        watch_context: params.watch_context || "solo",
+        feeling_adventurous: false,
+        only_my_streaming: false,
+      });
+    }
+  }, [open, params]);
+
+  const streamingCount = (user?.streaming_services || []).length;
+  const streamingHint = streamingCount > 0
+    ? `Filter to your ${streamingCount} service${streamingCount === 1 ? "" : "s"}`
+    : "Add services in Profile to enable";
 
   const handleApply = async () => {
     setApplyLoading(true);
     // Pass useAI=true to trigger AI recommendations for Chef's Curation
     await onParamsChange(localParams, true);
     setApplyLoading(false);
-    onOpenChange(false);
-  };
-
-  const handleReset = () => {
-    const defaultParams = {
-      brain_power: 50,
-      mood: 50,
-      energy: 50,
-      watch_context: "solo",
-    };
-    setLocalParams(defaultParams);
-    if (onReset) {
-      onReset();
-    }
     onOpenChange(false);
   };
 
@@ -190,7 +222,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, onReset }) =>
             </div>
 
             {/* Watch Context */}
-            <div className="mb-8">
+            <div className="mb-6">
               <p className="text-center text-sm text-chef-muted mb-4">Who&apos;s watching?</p>
               <WatchContextSelector
                 value={localParams.watch_context}
@@ -198,20 +230,33 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, onReset }) =>
               />
             </div>
 
+            {/* Toggle Switches */}
+            <div className="mb-8 space-y-3 max-w-md mx-auto">
+              <ToggleRow
+                icon={Compass}
+                iconColor="text-chef-teal"
+                title="Feeling adventurous"
+                subtitle="Only new discoveries — nothing from your Diary or Watchlist"
+                checked={localParams.feeling_adventurous}
+                onCheckedChange={(val) => setLocalParams({ ...localParams, feeling_adventurous: val })}
+                testId="vibe-toggle-adventurous"
+              />
+              <ToggleRow
+                icon={Tv}
+                iconColor="text-chef-gold"
+                title="Only my Streaming"
+                subtitle="Show movies I can watch right now"
+                hint={streamingCount === 0
+                  ? "Add services in Profile to enable"
+                  : `Filter to your ${streamingCount} service${streamingCount === 1 ? "" : "s"}`}
+                checked={localParams.only_my_streaming}
+                onCheckedChange={(val) => setLocalParams({ ...localParams, only_my_streaming: val })}
+                testId="vibe-toggle-streaming"
+              />
+            </div>
+
             {/* Actions */}
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={handleReset}
-                className="flex items-center gap-2 px-6 py-3 rounded-full
-                           border border-white/10 text-chef-muted
-                           hover:bg-white/5 hover:text-chef-platinum
-                           transition-all duration-300"
-                data-testid="vibe-reset-btn"
-              >
-                <RefreshCw className="w-4 h-4" strokeWidth={1.5} />
-                Reset
-              </button>
-              
+            <div className="flex justify-center">
               <button
                 onClick={handleApply}
                 disabled={applyLoading}
