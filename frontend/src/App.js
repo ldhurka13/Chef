@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import axios from "axios";
@@ -391,8 +391,11 @@ function AppContent() {
     }
   };
 
-  // Initialize data
+  // Initialize data (guarded to run only once)
+  const initializedRef = useRef(false);
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
     // Check auth on mount
     checkAuth();
     
@@ -414,8 +417,8 @@ function AppContent() {
           setWatchHistory(historyRes.data || []);
         }
         
-        // Initial section load (curated)
-        await fetchSectionMovies("curated");
+        // Initial section load: match the currently active section (default: chefs-curation)
+        await fetchSectionMovies(activeSection);
       } catch (error) {
         console.error("Failed to initialize:", error);
       } finally {
@@ -424,7 +427,8 @@ function AppContent() {
     };
     
     initializeData();
-  }, [checkAuth, fetchSectionMovies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Discover movies based on vibe params
   const discoverMovies = useCallback(async (params) => {

@@ -1,0 +1,22 @@
+{
+  "summary": "Verified end-to-end fix for the Chef's Special stale-cards bug and the top-10 slicing enhancement on /api/movies/ai-vibe-recommendations. Backend: 3/3 pytest cases passed (default vibe, feeling_adventurous, only_my_streaming) — all return <=10 results with vibe_rank 1..N, ai_powered=true, and correct filters_applied. Frontend Playwright: after login as vibetest2, opened Vibe Console, set brain_power=100, clicked Apply Vibe. AI badge appeared on Chef's Special tab (~12s), toast 'Found 10 AI-curated picks for your vibe!' shown, movie cards changed from default titles (Avatar Aang, Swapped, Accidental Partners...) to AI-picked complex films (Synecdoche New York, Eternal Sunshine, Mulholland Drive, The Tree of Life, ...) with exactly 10 cards. Regression: Discover (20), Your Bucketlist (20), Trending Now (10) tabs still load correctly. Vibe Console two-column layout with Solo/Date/Group + Adventurous/My streaming chips renders as expected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_ai_vibe_recommendations.py",
+    "/app/test_reports/pytest/ai_vibe_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "App.js is 924 lines and growing — consider splitting section-fetching logic into a hook (useSectionMovies) to reduce coupling between chefsCurationMovies state, vibeApplied flag, and initial section load. The useRef guard fix is correct but fragile; a dedicated hook would be cleaner.",
+    "server.py is 5594 lines — the AI vibe recommendation function (get_ai_vibe_recommendations, lines 3720-4203) is ~480 lines; extract prompt-building, filtering, and enrichment into helpers for maintainability."
+  ],
+  "updated_files": ["/app/backend/tests/test_ai_vibe_recommendations.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "vibetest2@example.com / Test123!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both reported issues are verified fixed. Backend endpoint /api/movies/ai-vibe-recommendations returns exactly 10 top results with vibe_rank re-indexed after filtering. Frontend init useEffect now uses useRef guard so it no longer overrides AI results on Chef's Special. Regression on other sections (Discover=explore, Bucketlist=curated, Trending=certified-swangy) unaffected.",
+  "rca of the issue": "Original bug: init useEffect had [checkAuth, fetchSectionMovies] deps; fetchSectionMovies is recreated whenever chefsCurationMovies changes (setChefsCurationMovies in handleVibeChange). So each Apply Vibe re-ran the init and called fetchSectionMovies('curated'), overwriting AI results with default curated data — exactly what user reported (AI badge visible, but stale cards). Fix uses initializedRef useRef guard + empty deps and calls fetchSectionMovies(activeSection) instead of hardcoded 'curated'. Verified fix works: cards now change to AI picks after Apply and persist across section switches."
+}
