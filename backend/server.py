@@ -4191,8 +4191,8 @@ Return 20 ranked movie recommendations as a JSON array with rank, title, year, v
     for idx, m in enumerate(enriched_results, start=1):
         m["vibe_rank"] = idx
     
-    # Return only top 10 (kept 20 through AI/filtering for headroom)
-    top_results = enriched_results[:10]
+    # Return only top 12 (kept 20 through AI/filtering for headroom)
+    top_results = enriched_results[:12]
     
     return {
         "results": top_results,
