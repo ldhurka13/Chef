@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Brain, Smile, Zap, Loader2, User, Users, Heart, Compass, Tv } from "lucide-react";
-import { Switch } from "./ui/switch";
+import { X, Brain, Smile, Zap, Loader2, User, Users, Heart, Compass, Tv, Info, Check } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "./ui/tooltip";
 
-// Watch Context Selector Component
+// Watch Context Selector Component (compact segmented chips)
 const WatchContextSelector = ({ value, onChange }) => {
   const options = [
     { id: "solo", label: "Solo", icon: User },
@@ -12,24 +12,104 @@ const WatchContextSelector = ({ value, onChange }) => {
   ];
 
   return (
-    <div className="flex justify-center gap-2">
-      {options.map(({ id, label, icon: Icon }) => (
-        <motion.button
-          key={id}
-          onClick={() => onChange(id)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all
-            ${value === id 
-              ? "bg-chef-teal/10 border-chef-teal/40 text-chef-teal" 
-              : "bg-chef-surface/40 border-white/10 text-chef-muted hover:border-white/20 hover:text-chef-platinum"
-            }`}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          data-testid={`watch-context-${id}`}
-        >
-          <Icon className="w-4 h-4" strokeWidth={1.5} />
-          <span className="text-sm font-medium">{label}</span>
-        </motion.button>
-      ))}
+    <div className="flex flex-wrap gap-2">
+      {options.map(({ id, label, icon: Icon }) => {
+        const active = value === id;
+        return (
+          <motion.button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(id)}
+            className={`inline-flex items-center gap-2 h-11 min-h-[44px] px-4 rounded-full border text-sm font-medium
+              transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-chef-teal/40
+              ${active
+                ? "bg-chef-teal/15 border-chef-teal/50 text-chef-teal"
+                : "bg-chef-surface/40 border-white/10 text-chef-muted hover:border-white/20 hover:text-chef-platinum"
+              }`}
+            whileTap={{ scale: 0.97 }}
+            data-testid={`watch-context-${id}`}
+          >
+            <Icon className="w-4 h-4" strokeWidth={1.5} />
+            <span>{label}</span>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+};
+
+// Preference Chip Toggle
+const PreferenceChip = ({
+  icon: Icon,
+  label,
+  active,
+  onToggle,
+  activeColor, // "teal" | "gold"
+  tooltip,
+  disabled,
+  testId,
+}) => {
+  const palette = activeColor === "gold"
+    ? {
+        border: "border-chef-gold/50",
+        bg: "bg-chef-gold/15",
+        text: "text-chef-gold",
+        ring: "focus-visible:ring-chef-gold/40",
+      }
+    : {
+        border: "border-chef-teal/50",
+        bg: "bg-chef-teal/15",
+        text: "text-chef-teal",
+        ring: "focus-visible:ring-chef-teal/40",
+      };
+
+  return (
+    <div className="relative inline-flex items-center">
+      <motion.button
+        type="button"
+        role="switch"
+        aria-checked={active}
+        aria-label={label}
+        aria-disabled={disabled}
+        onClick={() => !disabled && onToggle(!active)}
+        whileTap={{ scale: disabled ? 1 : 0.97 }}
+        className={`inline-flex items-center gap-2 h-11 min-h-[44px] pl-3 pr-3 rounded-full border text-sm font-medium
+          transition-colors focus:outline-none focus-visible:ring-2 ${palette.ring}
+          ${disabled ? "opacity-50 cursor-not-allowed" : ""}
+          ${active
+            ? `${palette.bg} ${palette.border} ${palette.text}`
+            : "bg-chef-surface/40 border-white/10 text-chef-muted hover:border-white/20 hover:text-chef-platinum"
+          }`}
+        data-testid={testId}
+      >
+        <Icon className="w-4 h-4" strokeWidth={1.5} />
+        <span>{label}</span>
+        {active && <Check className="w-3.5 h-3.5" strokeWidth={2} />}
+      </motion.button>
+      <TooltipProvider delayDuration={150}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={`About ${label}`}
+              className="ml-1 p-1 rounded-full text-chef-muted/70 hover:text-chef-platinum
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-chef-teal/40"
+              data-testid={`${testId}-info`}
+            >
+              <Info className="w-3.5 h-3.5" strokeWidth={1.75} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent
+            side="top"
+            sideOffset={6}
+            className="max-w-[220px] bg-chef-surface border border-white/10 text-chef-platinum text-xs leading-relaxed"
+          >
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 };
@@ -81,33 +161,6 @@ const VerticalSlider = ({ value, onChange, label, icon: Icon, lowLabel, highLabe
   );
 };
 
-// Toggle Row Component
-const ToggleRow = ({ icon: Icon, iconColor, title, subtitle, checked, onCheckedChange, testId, hint }) => {
-  return (
-    <div
-      className={`flex items-center gap-4 px-4 py-3 rounded-lg border transition-all
-        ${checked
-          ? "bg-chef-teal/5 border-chef-teal/30"
-          : "bg-chef-surface/40 border-white/10 hover:border-white/20"
-        }`}
-    >
-      <div className={`p-2 rounded-full bg-white/5 ${iconColor}`}>
-        <Icon className="w-4 h-4" strokeWidth={1.5} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-chef-platinum">{title}</p>
-        <p className="text-xs text-chef-muted mt-0.5">{hint || subtitle}</p>
-      </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        data-testid={testId}
-        className="data-[state=checked]:bg-chef-teal"
-      />
-    </div>
-  );
-};
-
 const VibeConsole = ({ open, onOpenChange, params, onParamsChange, user }) => {
   const [localParams, setLocalParams] = useState({
     ...params,
@@ -130,9 +183,6 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, user }) => {
   }, [open, params]);
 
   const streamingCount = (user?.streaming_services || []).length;
-  const streamingHint = streamingCount > 0
-    ? `Filter to your ${streamingCount} service${streamingCount === 1 ? "" : "s"}`
-    : "Add services in Profile to enable";
 
   const handleApply = async () => {
     setApplyLoading(true);
@@ -221,42 +271,52 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, user }) => {
               />
             </div>
 
-            {/* Watch Context */}
-            <div className="mb-6">
-              <p className="text-center text-sm text-chef-muted mb-4">Who&apos;s watching?</p>
-              <WatchContextSelector
-                value={localParams.watch_context}
-                onChange={(val) => setLocalParams({ ...localParams, watch_context: val })}
-              />
+            {/* Compact 2-column config: Who's watching | Preferences */}
+            <div className="max-w-2xl mx-auto mb-8">
+              <div className="grid grid-cols-1 min-[900px]:grid-cols-2 gap-8 min-[900px]:gap-10 items-start">
+                {/* Who's watching */}
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-chef-muted mb-3">Who&apos;s watching?</p>
+                  <div role="radiogroup" aria-label="Watch context">
+                    <WatchContextSelector
+                      value={localParams.watch_context}
+                      onChange={(val) => setLocalParams({ ...localParams, watch_context: val })}
+                    />
+                  </div>
+                </div>
+
+                {/* Preferences */}
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-chef-muted mb-3">Preferences</p>
+                  <div className="flex flex-wrap gap-2">
+                    <PreferenceChip
+                      icon={Compass}
+                      label="Adventurous"
+                      active={localParams.feeling_adventurous}
+                      onToggle={(val) => setLocalParams({ ...localParams, feeling_adventurous: val })}
+                      activeColor="teal"
+                      tooltip="Only new discoveries — nothing from your Diary or Watchlist."
+                      testId="vibe-toggle-adventurous"
+                    />
+                    <PreferenceChip
+                      icon={Tv}
+                      label="My streaming"
+                      active={localParams.only_my_streaming}
+                      onToggle={(val) => setLocalParams({ ...localParams, only_my_streaming: val })}
+                      activeColor="gold"
+                      disabled={streamingCount === 0}
+                      tooltip={streamingCount === 0
+                        ? "Add services in Profile to enable filtering."
+                        : "Filter to your selected streaming services."}
+                      testId="vibe-toggle-streaming"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Toggle Switches */}
-            <div className="mb-8 space-y-3 max-w-md mx-auto">
-              <ToggleRow
-                icon={Compass}
-                iconColor="text-chef-teal"
-                title="Feeling adventurous"
-                subtitle="Only new discoveries — nothing from your Diary or Watchlist"
-                checked={localParams.feeling_adventurous}
-                onCheckedChange={(val) => setLocalParams({ ...localParams, feeling_adventurous: val })}
-                testId="vibe-toggle-adventurous"
-              />
-              <ToggleRow
-                icon={Tv}
-                iconColor="text-chef-gold"
-                title="Only my Streaming"
-                subtitle="Show movies I can watch right now"
-                hint={streamingCount === 0
-                  ? "Add services in Profile to enable"
-                  : `Filter to your ${streamingCount} service${streamingCount === 1 ? "" : "s"}`}
-                checked={localParams.only_my_streaming}
-                onCheckedChange={(val) => setLocalParams({ ...localParams, only_my_streaming: val })}
-                testId="vibe-toggle-streaming"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-center">
+            {/* Apply button */}
+            <div className="flex justify-center pt-1 pb-1">
               <button
                 onClick={handleApply}
                 disabled={applyLoading}
