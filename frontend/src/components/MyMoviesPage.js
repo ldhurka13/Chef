@@ -8,6 +8,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
+import AddToLibraryDialog from "./AddToLibraryDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -663,16 +664,10 @@ const DiaryDetailModal = ({ movie, onClose, onMovieUpdated, onMovieRemoved }) =>
 
 // ========== DIARY TAB ==========
 const DiaryTab = ({ onMovieClick, onRefreshLibrary }) => {
-  const debounceRef = useRef(null);
   const [watchHistory, setWatchHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [addingMovie, setAddingMovie] = useState(null);
-  const [addRating, setAddRating] = useState(7.0);
-  const [addDate, setAddDate] = useState(new Date().toISOString().split("T")[0]);
-  const [addComment, setAddComment] = useState("");
+  const [filterQuery, setFilterQuery] = useState("");
+  const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -746,53 +741,6 @@ const DiaryTab = ({ onMovieClick, onRefreshLibrary }) => {
     } finally { setLoading(false); }
   };
 
-  const handleSearch = useCallback((q) => {
-    setQuery(q);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (q.length < 2) { setResults([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await axios.get(`${API}/movies/search-tmdb?query=${encodeURIComponent(q)}`);
-        setResults(res.data.results || []);
-      } catch { setResults([]); }
-      finally { setSearching(false); }
-    }, 350);
-  }, []);
-
-  const handleSelect = (movie) => {
-    setAddingMovie(movie);
-    setAddRating(7.0);
-    setAddDate(new Date().toISOString().split("T")[0]);
-    setAddComment("");
-    setQuery("");
-    setResults([]);
-  };
-
-  const handleAdd = async () => {
-    if (!addingMovie) return;
-    try {
-      // Use poster_path if available, otherwise extract from poster_url
-      const posterPath = addingMovie.poster_path || 
-        (addingMovie.poster_url ? addingMovie.poster_url.replace("https://image.tmdb.org/t/p/w185", "").replace("https://image.tmdb.org/t/p/w500", "") : null);
-      
-      await axios.post(`${API}/user/watch-history`, {
-        tmdb_id: addingMovie.id,
-        user_rating: addRating,
-        watched_date: addDate,
-        title: addingMovie.title,
-        poster_path: posterPath,
-        comment: addComment,
-      }, { headers: authHeaders() });
-      toast.success(`Added "${addingMovie.title}"`);
-      setAddingMovie(null);
-      setAddComment("");
-      fetchHistory();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to add");
-    }
-  };
-
   const handleRemove = async (tmdbId, title) => {
     try {
       await axios.delete(`${API}/user/watch-history/${tmdbId}`, { headers: authHeaders() });
@@ -820,6 +768,12 @@ const DiaryTab = ({ onMovieClick, onRefreshLibrary }) => {
   // Apply sorting and filtering
   const getProcessedHistory = () => {
     let filtered = [...watchHistory];
+    
+    // Client-side filter by title (case-insensitive substring)
+    if (filterQuery.trim().length > 0) {
+      const q = filterQuery.trim().toLowerCase();
+      filtered = filtered.filter((item) => (item.title || "").toLowerCase().includes(q));
+    }
     
     // Filter by genres (multi-select - movie must match ANY selected genre)
     if (filterGenres.length > 0) {
@@ -913,7 +867,7 @@ const DiaryTab = ({ onMovieClick, onRefreshLibrary }) => {
 
   const processedHistory = getProcessedHistory();
   const moviesByMonth = getMoviesByMonth();
-  const hasActiveFilters = filterGenres.length > 0 || filterDecades.length > 0 || filterRatings.length > 0;
+  const hasActiveFilters = filterGenres.length > 0 || filterDecades.length > 0 || filterRatings.length > 0 || filterQuery.trim().length > 0;
   const totalActiveFilters = filterGenres.length + filterDecades.length + filterRatings.length;
 
   const clearAllFilters = () => {
@@ -1062,126 +1016,49 @@ const DiaryTab = ({ onMovieClick, onRefreshLibrary }) => {
         )}
       </AnimatePresence>
 
-      {/* Search to add */}
-      <div className="relative mb-6">
-        <div className="flex items-center gap-2 bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-3">
+      {/* Filter + Add button */}
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex-1 flex items-center gap-2 bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-3">
           <Search className="w-4 h-4 text-chef-muted/40" />
           <input
             type="text"
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search a movie to add to your diary..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            placeholder="Filter your diary…"
             className="flex-1 bg-transparent text-sm text-chef-platinum placeholder:text-chef-muted/30 focus:outline-none"
             data-testid="diary-search-input"
           />
-          {searching && <Loader2 className="w-4 h-4 text-chef-teal animate-spin" />}
+          {filterQuery && (
+            <button
+              onClick={() => setFilterQuery("")}
+              className="p-1 rounded hover:bg-white/10 text-chef-muted hover:text-chef-platinum"
+              aria-label="Clear filter"
+              data-testid="diary-clear-filter"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
-        {results.length > 0 && !addingMovie && (
-          <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-chef-surface/95 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden shadow-cinematic max-h-72 overflow-y-auto">
-            {results.map((m) => {
-              const inHistory = watchHistory.some((h) => h.tmdb_id === m.id);
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => handleSelect(m)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${inHistory ? "opacity-50" : "hover:bg-white/5"}`}
-                  data-testid={`diary-result-${m.id}`}
-                >
-                  {m.poster_url ? (
-                    <img src={m.poster_url} alt="" className="w-8 h-12 rounded object-cover flex-shrink-0" />
-                  ) : (
-                    <div className="w-8 h-12 rounded bg-chef-bg flex-shrink-0" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-chef-platinum truncate">{m.title}</p>
-                    <p className="text-xs text-chef-muted">{m.year}</p>
-                  </div>
-                  {inHistory && <span className="text-xs text-chef-teal">In diary</span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <button
+          onClick={() => setShowAddDialog(true)}
+          className="inline-flex items-center gap-2 px-4 py-3 rounded-lg
+                   bg-chef-teal/15 border border-chef-teal/40 text-chef-teal text-sm font-medium
+                   hover:bg-chef-teal/25 transition-colors whitespace-nowrap
+                   focus:outline-none focus:ring-2 focus:ring-chef-teal/40"
+          data-testid="open-add-diary-btn"
+        >
+          <Plus className="w-4 h-4" />
+          Add to Diary
+        </button>
       </div>
 
-      {/* Add movie form */}
-      <AnimatePresence>
-        {addingMovie && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mb-6 bg-chef-surface/60 border border-chef-teal/20 rounded-lg p-5 overflow-hidden"
-          >
-            <div className="flex items-start gap-4">
-              {addingMovie.poster_url ? (
-                <img src={addingMovie.poster_url} alt="" className="w-16 h-24 rounded object-cover flex-shrink-0" />
-              ) : (
-                <div className="w-16 h-24 rounded bg-chef-bg flex-shrink-0 flex items-center justify-center">
-                  <Film className="w-5 h-5 text-chef-muted/30" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-base text-chef-platinum font-medium truncate">{addingMovie.title}</p>
-                <p className="text-xs text-chef-muted mb-4">{addingMovie.year}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-chef-muted uppercase tracking-wider mb-1.5">
-                      Your Rating: <span className="text-chef-gold font-medium text-sm">{addRating.toFixed(1)}</span>/10
-                    </label>
-                    <input
-                      type="range" min="0" max="10" step="0.1" value={addRating}
-                      onChange={(e) => setAddRating(parseFloat(e.target.value))}
-                      className="w-full accent-chef-gold"
-                      data-testid="diary-rating-slider"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-chef-muted uppercase tracking-wider mb-1.5">Watch Date</label>
-                    <input
-                      type="date" value={addDate}
-                      onChange={(e) => setAddDate(e.target.value)}
-                      max={new Date().toISOString().split("T")[0]}
-                      className="w-full bg-chef-bg/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-chef-platinum focus:outline-none focus:border-chef-teal/40 [color-scheme:dark]"
-                      data-testid="diary-date-input"
-                    />
-                  </div>
-                </div>
-                {/* Comment field */}
-                <div className="mt-4">
-                  <label className="block text-xs text-chef-muted uppercase tracking-wider mb-1.5">
-                    <MessageSquare className="w-3 h-3 inline mr-1" />
-                    Comment (optional)
-                  </label>
-                  <textarea
-                    value={addComment}
-                    onChange={(e) => setAddComment(e.target.value)}
-                    placeholder="Add a note about this watch..."
-                    rows={2}
-                    className="w-full bg-chef-bg/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-chef-platinum placeholder:text-chef-muted/30 focus:outline-none focus:border-chef-teal/40 resize-none"
-                    data-testid="diary-comment-input"
-                  />
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={handleAdd}
-                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-chef-teal/10 border border-chef-teal/20 text-chef-teal text-sm hover:bg-chef-teal/20 transition-colors"
-                    data-testid="confirm-add-diary-btn"
-                  >
-                    <Check className="w-3.5 h-3.5" /> Add to Diary
-                  </button>
-                  <button
-                    onClick={() => setAddingMovie(null)}
-                    className="px-4 py-2.5 rounded-lg text-sm text-chef-muted hover:text-chef-platinum hover:bg-white/5 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <AddToLibraryDialog
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        mode="diary"
+        existingIds={watchHistory.map((h) => h.tmdb_id)}
+        onAdded={() => { fetchHistory(); if (onRefreshLibrary) onRefreshLibrary(); }}
+      />
 
       {/* History - List or Calendar View */}
       {loading ? (
@@ -1301,12 +1178,10 @@ const DiaryTab = ({ onMovieClick, onRefreshLibrary }) => {
 
 // ========== WATCHLIST TAB ==========
 const WatchlistTab = ({ onMovieClick, onRefreshLibrary }) => {
-  const debounceRef = useRef(null);
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
+  const [filterQuery, setFilterQuery] = useState("");
+  const [showAddDialog, setShowAddDialog] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
   
@@ -1349,42 +1224,6 @@ const WatchlistTab = ({ onMovieClick, onRefreshLibrary }) => {
     } finally { setLoading(false); }
   };
 
-  const handleSearch = useCallback((q) => {
-    setQuery(q);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (q.length < 2) { setResults([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await axios.get(`${API}/movies/search-tmdb?query=${encodeURIComponent(q)}`);
-        setResults(res.data.results || []);
-      } catch { setResults([]); }
-      finally { setSearching(false); }
-    }, 350);
-  }, []);
-
-  const handleAdd = async (movie) => {
-    try {
-      // Use poster_path if available, otherwise extract from poster_url
-      const posterPath = movie.poster_path || 
-        (movie.poster_url ? movie.poster_url.replace("https://image.tmdb.org/t/p/w185", "").replace("https://image.tmdb.org/t/p/w500", "") : null);
-      
-      await axios.post(`${API}/user/watchlist`, {
-        tmdb_id: movie.id,
-        title: movie.title,
-        poster_path: posterPath,
-        release_date: movie.year || null,
-        vote_average: movie.rating || null,
-      }, { headers: authHeaders() });
-      toast.success(`Added "${movie.title}" to watchlist`);
-      setQuery("");
-      setResults([]);
-      fetchWatchlist();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to add");
-    }
-  };
-
   const handleRemove = async (tmdbId, title) => {
     try {
       await axios.delete(`${API}/user/watchlist/${tmdbId}`, { headers: authHeaders() });
@@ -1412,6 +1251,12 @@ const WatchlistTab = ({ onMovieClick, onRefreshLibrary }) => {
   // Apply sorting and filtering
   const getProcessedWatchlist = () => {
     let filtered = [...watchlist];
+    
+    // Client-side filter by title (case-insensitive substring)
+    if (filterQuery.trim().length > 0) {
+      const q = filterQuery.trim().toLowerCase();
+      filtered = filtered.filter((item) => (item.title || "").toLowerCase().includes(q));
+    }
     
     // Filter by genre
     if (filterGenre !== "all") {
@@ -1452,7 +1297,7 @@ const WatchlistTab = ({ onMovieClick, onRefreshLibrary }) => {
   };
 
   const processedWatchlist = getProcessedWatchlist();
-  const hasActiveFilters = filterGenre !== "all";
+  const hasActiveFilters = filterGenre !== "all" || filterQuery.trim().length > 0;
 
   return (
     <div>
@@ -1545,52 +1390,49 @@ const WatchlistTab = ({ onMovieClick, onRefreshLibrary }) => {
         )}
       </AnimatePresence>
 
-      {/* Search to add */}
-      <div className="relative mb-6">
-        <div className="flex items-center gap-2 bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-3">
+      {/* Filter + Add button */}
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex-1 flex items-center gap-2 bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-3">
           <Search className="w-4 h-4 text-chef-muted/40" />
           <input
             type="text"
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search a movie to add to your watchlist..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            placeholder="Filter your watchlist…"
             className="flex-1 bg-transparent text-sm text-chef-platinum placeholder:text-chef-muted/30 focus:outline-none"
             data-testid="watchlist-search-input"
           />
-          {searching && <Loader2 className="w-4 h-4 text-chef-teal animate-spin" />}
+          {filterQuery && (
+            <button
+              onClick={() => setFilterQuery("")}
+              className="p-1 rounded hover:bg-white/10 text-chef-muted hover:text-chef-platinum"
+              aria-label="Clear filter"
+              data-testid="watchlist-clear-filter"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
-        {results.length > 0 && (
-          <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-chef-surface/95 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden shadow-cinematic max-h-72 overflow-y-auto">
-            {results.map((m) => {
-              const inList = watchlist.some((w) => w.tmdb_id === m.id);
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => !inList && handleAdd(m)}
-                  disabled={inList}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${inList ? "opacity-50 cursor-not-allowed" : "hover:bg-white/5"}`}
-                  data-testid={`watchlist-result-${m.id}`}
-                >
-                  {m.poster_url ? (
-                    <img src={m.poster_url} alt="" className="w-8 h-12 rounded object-cover flex-shrink-0" />
-                  ) : (
-                    <div className="w-8 h-12 rounded bg-chef-bg flex-shrink-0" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-chef-platinum truncate">{m.title}</p>
-                    <p className="text-xs text-chef-muted">{m.year}{m.rating ? ` / ${m.rating}` : ""}</p>
-                  </div>
-                  {inList ? (
-                    <span className="text-xs text-chef-teal flex-shrink-0">In watchlist</span>
-                  ) : (
-                    <Plus className="w-4 h-4 text-chef-muted flex-shrink-0" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <button
+          onClick={() => setShowAddDialog(true)}
+          className="inline-flex items-center gap-2 px-4 py-3 rounded-lg
+                   bg-chef-teal/15 border border-chef-teal/40 text-chef-teal text-sm font-medium
+                   hover:bg-chef-teal/25 transition-colors whitespace-nowrap
+                   focus:outline-none focus:ring-2 focus:ring-chef-teal/40"
+          data-testid="open-add-watchlist-btn"
+        >
+          <Plus className="w-4 h-4" />
+          Add to Watchlist
+        </button>
       </div>
+
+      <AddToLibraryDialog
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        mode="watchlist"
+        existingIds={watchlist.map((w) => w.tmdb_id)}
+        onAdded={() => { fetchWatchlist(); if (onRefreshLibrary) onRefreshLibrary(); }}
+      />
 
       {/* Watchlist items */}
       {loading ? (
@@ -1673,67 +1515,58 @@ const WatchlistTab = ({ onMovieClick, onRefreshLibrary }) => {
 };
 
 // ========== PROFILE TAB ==========
-const ProfileTab = ({ user, onUserUpdate }) => {
-  const debounceRef = useRef(null);
-  const [favoriteMovies, setFavoriteMovies] = useState(user?.favorite_movies || []);
-  const [movieQuery, setMovieQuery] = useState("");
-  const [movieResults, setMovieResults] = useState([]);
-  const [movieSearching, setMovieSearching] = useState(false);
-  const [saving, setSaving] = useState(false);
+const ProfileTab = ({ user, onMovieClick }) => {
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(true);
+  const [obsessions, setObsessions] = useState([]);
+  const [obsessionsLoading, setObsessionsLoading] = useState(true);
 
   useEffect(() => {
-    setFavoriteMovies(user?.favorite_movies || []);
-  }, [user]);
-
-  useEffect(() => { fetchInsights(); }, []);
+    fetchInsights();
+    fetchObsessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchInsights = async () => {
     setInsightsLoading(true);
     try {
       const res = await axios.get(`${API}/user/profile-insights`, { headers: authHeaders() });
       setInsights(res.data);
-    } catch {} finally { setInsightsLoading(false); }
-  };
-
-  const handleMovieSearch = useCallback((q) => {
-    setMovieQuery(q);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (q.length < 2) { setMovieResults([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      setMovieSearching(true);
-      try {
-        const res = await axios.get(`${API}/movies/search-tmdb?query=${encodeURIComponent(q)}`);
-        setMovieResults(res.data.results || []);
-      } catch { setMovieResults([]); }
-      finally { setMovieSearching(false); }
-    }, 350);
-  }, []);
-
-  const handleAddMovie = (movie) => {
-    if (favoriteMovies.length >= 5 || favoriteMovies.some((m) => m.id === movie.id)) return;
-    const updated = [...favoriteMovies, movie];
-    setFavoriteMovies(updated);
-    setMovieQuery("");
-    setMovieResults([]);
-    saveMovies(updated);
-  };
-
-  const handleRemoveMovie = (movieId) => {
-    const updated = favoriteMovies.filter((m) => m.id !== movieId);
-    setFavoriteMovies(updated);
-    saveMovies(updated);
-  };
-
-  const saveMovies = async (movies) => {
-    setSaving(true);
-    try {
-      const res = await axios.put(`${API}/auth/profile`, { favorite_movies: movies }, { headers: authHeaders() });
-      if (onUserUpdate) onUserUpdate(res.data);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Save failed");
-    } finally { setSaving(false); }
+      console.error("Failed to fetch profile insights:", err);
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
+
+  // Pull top 10 diary picks (most-watched, tie-break by highest rating) and randomly show 4
+  const fetchObsessions = async () => {
+    setObsessionsLoading(true);
+    try {
+      const res = await axios.get(`${API}/user/watch-history`, { headers: authHeaders() });
+      const diary = res.data || [];
+      const scored = diary
+        .filter((m) => m.tmdb_id)
+        .sort((a, b) => {
+          const wcDiff = (b.watch_count || 1) - (a.watch_count || 1);
+          if (wcDiff !== 0) return wcDiff;
+          return (b.user_rating || 0) - (a.user_rating || 0);
+        });
+      const top10 = scored.slice(0, 10);
+      // Randomly pick up to 4
+      const pool = [...top10];
+      const picks = [];
+      const target = Math.min(4, pool.length);
+      while (picks.length < target && pool.length > 0) {
+        const idx = Math.floor(Math.random() * pool.length);
+        picks.push(pool.splice(idx, 1)[0]);
+      }
+      setObsessions(picks);
+    } catch (err) {
+      console.error("Failed to fetch obsessions:", err);
+    } finally {
+      setObsessionsLoading(false);
+    }
   };
 
   const Section = ({ title, icon: Icon, children, subtitle }) => (
@@ -1804,88 +1637,55 @@ const ProfileTab = ({ user, onUserUpdate }) => {
 
   return (
     <div>
-      {/* Top 5 Favorite Movies (user-chosen) */}
-      <Section title="Top 5 Favorite Movies" icon={Film}>
-        {favoriteMovies.length < 5 && (
-          <div className="relative mb-4">
-            <div className="flex items-center gap-2 bg-chef-surface/60 border border-white/10 rounded-lg px-4 py-2.5">
-              <Search className="w-4 h-4 text-chef-muted/40" />
-              <input
-                type="text"
-                value={movieQuery}
-                onChange={(e) => handleMovieSearch(e.target.value)}
-                placeholder="Search for a movie..."
-                className="flex-1 bg-transparent text-sm text-chef-platinum placeholder:text-chef-muted/30 focus:outline-none"
-                data-testid="profile-movie-search-input"
-              />
-              {movieSearching && <Loader2 className="w-4 h-4 text-chef-teal animate-spin" />}
-            </div>
-            {movieResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-chef-surface/95 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden shadow-cinematic max-h-72 overflow-y-auto">
-                {movieResults.map((m) => {
-                  const isAdded = favoriteMovies.some((fm) => fm.id === m.id);
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => !isAdded && handleAddMovie(m)}
-                      disabled={isAdded}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-white/5"}`}
-                      data-testid={`profile-movie-result-${m.id}`}
-                    >
-                      {m.poster_url ? (
-                        <img src={m.poster_url} alt="" className="w-8 h-12 rounded object-cover flex-shrink-0" />
-                      ) : (
-                        <div className="w-8 h-12 rounded bg-chef-bg flex-shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm text-chef-platinum truncate">{m.title}</p>
-                        <p className="text-xs text-chef-muted">{m.year}{m.rating ? ` / ${m.rating}` : ""}</p>
-                      </div>
-                      {isAdded && <Check className="w-4 h-4 text-chef-teal ml-auto flex-shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+      {/* You can't get enough of... */}
+      <Section
+        title="You can't get enough of..."
+        icon={Film}
+        subtitle="4 random picks from your most-rewatched, highest-rated films"
+      >
+        {obsessionsLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="aspect-[2/3] rounded-lg bg-chef-surface/40 border border-white/10 skeleton" />
+            ))}
           </div>
-        )}
-        <div className="grid grid-cols-5 gap-3">
-          {[...Array(5)].map((_, i) => {
-            const movie = favoriteMovies[i];
-            return (
-              <div key={i} className="relative aspect-[2/3] rounded-lg overflow-hidden border border-white/10 bg-chef-surface/40">
-                {movie ? (
-                  <>
-                    {movie.poster_url ? (
-                      <img src={movie.poster_url} alt={movie.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Film className="w-6 h-6 text-chef-muted/30" />
-                      </div>
-                    )}
-                    <button
-                      onClick={() => handleRemoveMovie(movie.id)}
-                      className="absolute top-1 right-1 p-1 rounded-full bg-black/70 text-white hover:bg-red-500/80 transition-colors"
-                      data-testid={`profile-remove-movie-${i}`}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                      <p className="text-[10px] text-white leading-tight truncate">{movie.title}</p>
+        ) : obsessions.length === 0 ? (
+          <p className="text-sm text-chef-muted/50 ml-1">
+            Log a few films in your Diary and rewatch your favourites to fill this shelf.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {obsessions.map((movie) => {
+              const posterUrl = movie.poster_url || (movie.poster_path ? `${TMDB_IMG}w342${movie.poster_path}` : null);
+              return (
+                <button
+                  key={movie.tmdb_id}
+                  onClick={() => onMovieClick && onMovieClick({ id: movie.tmdb_id, title: movie.title })}
+                  className="relative aspect-[2/3] rounded-lg overflow-hidden border border-white/10 bg-chef-surface/40
+                           group text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-chef-teal/40"
+                  data-testid={`obsession-movie-${movie.tmdb_id}`}
+                >
+                  {posterUrl ? (
+                    <img
+                      src={posterUrl}
+                      alt={movie.title}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Film className="w-6 h-6 text-chef-muted/30" />
                     </div>
-                  </>
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-                    <span className="text-xl font-serif text-chef-muted/20">{i + 1}</span>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3">
+                    <p className="text-xs text-white font-medium leading-tight truncate">{movie.title}</p>
+                    <p className="text-[10px] text-chef-teal mt-0.5">
+                      {movie.watch_count || 1}× watched
+                      {movie.user_rating ? ` · ${movie.user_rating.toFixed(1)}★` : ""}
+                    </p>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {saving && (
-          <div className="flex items-center gap-2 mt-2 text-xs text-chef-muted">
-            <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+                </button>
+              );
+            })}
           </div>
         )}
       </Section>
@@ -1998,7 +1798,7 @@ const MyMoviesPage = ({ user, onUserUpdate, onMovieClick, onRequestOnboarding, o
           >
             {activeTab === "diary" && <DiaryTab onMovieClick={onMovieClick} onRefreshLibrary={onRefreshLibrary} />}
             {activeTab === "watchlist" && <WatchlistTab onMovieClick={onMovieClick} onRefreshLibrary={onRefreshLibrary} />}
-            {activeTab === "profile" && <ProfileTab user={user} onUserUpdate={onUserUpdate} />}
+            {activeTab === "profile" && <ProfileTab user={user} onMovieClick={onMovieClick} />}
           </motion.div>
         </AnimatePresence>
       </div>
