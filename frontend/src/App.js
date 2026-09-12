@@ -95,6 +95,7 @@ function AppContent() {
   });
   const [vibeApplied, setVibeApplied] = useState(false);
   const [chefsCurationMovies, setChefsCurationMovies] = useState([]);
+  const [chefsCurationVibeKey, setChefsCurationVibeKey] = useState(null);
   const [chefsCurationLoading, setChefsCurationLoading] = useState(false);
   
   // Data states
@@ -115,9 +116,9 @@ function AppContent() {
     // For Chef's Curation, use dedicated state
     if (section === "chefs-curation") {
       // If vibe has been applied, use AI recommendations (already in state)
-      if (chefsCurationMovies.length > 0) {
+      if (vibeApplied && chefsCurationMovies.length > 0 && chefsCurationVibeKey === JSON.stringify(vibeParams)) { 
         setSectionMovies(chefsCurationMovies);
-        return;
+        return; 
       }
       // Otherwise fetch default Chef's Curation (like curated but without watchlist filter)
       setChefsCurationLoading(true);
@@ -184,7 +185,7 @@ function AppContent() {
     } finally {
       setSectionLoading(false);
     }
-  }, [vibeParams, vibeApplied, chefsCurationMovies]);
+  }, [vibeParams, vibeApplied, chefsCurationMovies, chefsCurationVibeKey]);
 
   // Handle section change
   const handleSectionChange = useCallback((section) => {
@@ -457,6 +458,7 @@ function AppContent() {
         
         const aiResults = res.data.results || [];
         setChefsCurationMovies(aiResults);
+        setChefsCurationVibeKey(JSON.stringify(newParams));
         setVibeApplied(true);
         
         // If on Chef's Curation, update displayed movies

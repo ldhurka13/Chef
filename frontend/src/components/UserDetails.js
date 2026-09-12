@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ArrowLeft, Camera, X, Plus, Search, Upload, Check,
+  ArrowLeft, Camera, X, Plus, Search, Check,
   Film, Star, Users, FileText, Loader2, Tv
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
+import LetterboxdImportDialog from "./LetterboxdImportDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -39,7 +40,6 @@ const Section = ({ title, icon: Icon, children }) => (
 const UserDetails = ({ user, onUserUpdate }) => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
-  const csvInputRef = useRef(null);
 
   const [gender, setGender] = useState(user?.gender || "");
   const [bio, setBio] = useState(user?.bio || "");
@@ -49,6 +49,7 @@ const UserDetails = ({ user, onUserUpdate }) => {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [csvUploading, setCsvUploading] = useState(false);
+  const [letterboxdDialogOpen, setLetterboxdDialogOpen] = useState(false);
 
   useEffect(() => {
     setGender(user?.gender || "");
@@ -90,8 +91,7 @@ const UserDetails = ({ user, onUserUpdate }) => {
     }
   };
 
-  const handleCsvUpload = async (e) => {
-    const file = e.target.files?.[0];
+  const handleLetterboxdUpload = async (file) => {
     if (!file) return;
     setCsvUploading(true);
     const formData = new FormData();
@@ -111,16 +111,20 @@ const UserDetails = ({ user, onUserUpdate }) => {
       } else {
         fetchLetterboxdData();
       }
+      setLetterboxdDialogOpen(false);
     } catch (err) {
       if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
         toast.info("Import is still processing. Your movies will appear shortly — refresh the page in a moment.");
         setTimeout(() => fetchLetterboxdData(), 5000);
+        setLetterboxdDialogOpen(false);
       } else {
-        toast.error(err.response?.data?.detail || "Import failed");
+        const detail = err.response?.data?.detail || "We couldn't read that ZIP. Make sure it's the export directly from Letterboxd.";
+        toast.error(detail);
+        // Re-throw so the dialog can display an inline error too
+        throw new Error(detail);
       }
     } finally {
       setCsvUploading(false);
-      if (csvInputRef.current) csvInputRef.current.value = "";
     }
   };
 
@@ -330,7 +334,7 @@ const UserDetails = ({ user, onUserUpdate }) => {
                 </div>
               </div>
               <button
-                onClick={() => csvInputRef.current?.click()}
+                onClick={() => setLetterboxdDialogOpen(true)}
                 className="text-xs text-chef-teal hover:text-chef-teal/80 transition-colors"
                 data-testid="reimport-letterboxd-btn"
               >
@@ -338,44 +342,31 @@ const UserDetails = ({ user, onUserUpdate }) => {
               </button>
             </div>
           ) : (
-            <div
-              onClick={() => csvInputRef.current?.click()}
-              className="border-2 border-dashed border-white/10 rounded-lg p-8
-                       flex flex-col items-center justify-center gap-3
-                       hover:border-chef-teal/30 hover:bg-chef-teal/5
-                       transition-all cursor-pointer"
-              data-testid="letterboxd-dropzone"
-            >
-              {csvUploading ? (
-                <>
-                  <Loader2 className="w-8 h-8 text-chef-teal animate-spin" />
-                  <p className="text-sm text-chef-teal">Importing &mdash; this may take a minute...</p>
-                </>
-              ) : (
-                <>
-                  <Upload className="w-8 h-8 text-chef-muted/40" />
-                  <div className="text-center">
-                    <p className="text-sm text-chef-platinum">Upload your Letterboxd export</p>
-                    <p className="text-xs text-chef-muted/50 mt-1">
-                      ZIP or CSV &mdash; Go to Letterboxd Settings &gt; Import &amp; Export &gt; Export Your Data
-                    </p>
-                    <p className="text-xs text-chef-muted/30 mt-0.5">
-                      Ratings &amp; reviews go to Diary, watchlist goes to Watchlist
-                    </p>
-                  </div>
-                </>
-              )}
+            <div className="bg-chef-surface/60 border border-white/10 rounded-lg p-5">
+              <p className="text-sm text-chef-platinum mb-1">Bring in your Letterboxd history</p>
+              <p className="text-xs text-chef-muted/70 mb-4 leading-relaxed">
+                Grab your data export from Letterboxd, then upload the ZIP here. Ratings &amp; reviews flow into your Diary, and your Letterboxd watchlist becomes your Watchlist.
+              </p>
+              <button
+                onClick={() => setLetterboxdDialogOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium
+                         bg-chef-teal/20 border border-chef-teal/40 text-chef-teal
+                         hover:bg-chef-teal/30 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-chef-teal/40"
+                data-testid="get-letterboxd-export-btn"
+              >
+                Get my Letterboxd export
+              </button>
             </div>
           )}
-          <input
-            ref={csvInputRef}
-            type="file"
-            accept=".csv,.zip"
-            className="hidden"
-            onChange={handleCsvUpload}
-            data-testid="letterboxd-file-input"
-          />
         </Section>
+
+        <LetterboxdImportDialog
+          open={letterboxdDialogOpen}
+          onOpenChange={setLetterboxdDialogOpen}
+          onUpload={handleLetterboxdUpload}
+          uploading={csvUploading}
+        />
 
         {/* Save Button */}
         <div className="sticky bottom-24 z-10 flex justify-end">
