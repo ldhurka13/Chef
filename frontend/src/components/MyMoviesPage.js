@@ -1552,9 +1552,9 @@ const ProfileTab = ({ user, onMovieClick }) => {
           if (wcDiff !== 0) return wcDiff;
           return (b.user_rating || 0) - (a.user_rating || 0);
         });
-      const top10 = scored.slice(0, 10);
+      const top25 = scored.slice(0, 25);
       // Randomly pick up to 4
-      const pool = [...top10];
+      const pool = [...top25];
       const picks = [];
       const target = Math.min(4, pool.length);
       while (picks.length < target && pool.length > 0) {
