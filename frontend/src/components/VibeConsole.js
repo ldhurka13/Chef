@@ -349,7 +349,7 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, user }) => {
     { max: 20, label: "Brain Dead" },
     { max: 40, label: "Zoned Out" },
     { max: 60, label: "System Rebooting" },
-    { max: 80, label: "Focusing..." },
+    { max: 80, label: "Locking In" },
     { max: 100, label: "Intellectual stimulation" }
   ];
  
@@ -365,8 +365,8 @@ const VibeConsole = ({ open, onOpenChange, params, onParamsChange, user }) => {
     { max: 20, label: "Sleep Mode" },
     { max: 40, label: "Battery Low" },
     { max: 60, label: "Waking Up" },
-    { max: 80, label: "Locking in" },
-    { max: 100, label: "Bring it on" }
+    { max: 80, label: "Let's get it" },
+    { max: 100, label: "High Stakes" }
   ];
 
   return (
