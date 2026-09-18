@@ -211,8 +211,8 @@ class AIVibeRequest(BaseModel):
     mood: int = Field(ge=0, le=100, default=50)  # 0=Serious (dramatic), 100=Fun (comedy)
     energy: int = Field(ge=0, le=100, default=50)  # 0=Exhausted (calming), 100=LFG (intense)
     watch_context: str = Field(default="solo")  # "solo", "date", "group"
-    feeling_adventurous: bool = Field(default=False)  # Exclude Diary + Watchlist titles
-    only_my_streaming: bool = Field(default=False)  # Filter to user's streaming services
+    comfort_context: str = Field(default="adventurous")  # Exclude Diary + Watchlist titles
+    stream_context: str = Field(default="all")  # Filter to user's streaming services
 
 # ============ AUTH HELPERS ============
 
@@ -3773,7 +3773,7 @@ async def get_ai_vibe_recommendations(
         ]
         user_profile["watched_tmdb_ids"] = {w.get("tmdb_id") for w in watch_history if w.get("tmdb_id")}
         
-        # Get watchlist (for feeling_adventurous)
+        # Get watchlist (for comfort_context)
         watchlist_items = await db.watchlist.find(
             {"user_id": user_id},
             {"_id": 0, "title": 1, "tmdb_id": 1}
@@ -3822,7 +3822,7 @@ async def get_ai_vibe_recommendations(
     # High = Fun (funny, goofy, silly, induces laughter)
     # Low = Serious (serious topics, non-fiction, melancholic)
     if mood > 80:
-        vibe_description.append("very funny, goofy, silly, absurdist humor, laugh-out-loud")
+        vibe_description.append("slapstick, very funny, goofy, silly, absurdist humor, laugh-out-loud")
     elif mood > 60:
         vibe_description.append("comedic, lighthearted, witty, amusing")
     elif mood < 20:
